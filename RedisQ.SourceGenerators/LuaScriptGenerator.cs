@@ -45,7 +45,7 @@ public class LuaScriptGenerator : IIncrementalGenerator
             var content = file.GetText(cancellationToken)?.ToString();
             if (!string.IsNullOrEmpty(content))
             {
-                fileContent[file.Path] = content;
+                fileContent[file.Path] = content!;
             }
         }
 
