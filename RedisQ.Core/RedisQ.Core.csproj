@@ -11,4 +11,29 @@
       <PackageReference Include="StackExchange.Redis" Version="2.8.41" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\RedisQ.SourceGenerators\RedisQ.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="commands/**/*.lua" />
+        <AdditionalFiles Include="commands/*.lua" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="commands\**\*.lua" />
+    </ItemGroup>
+
+    <!-- Target to expand Lua scripts -->
+    <Target Name="ExpandLuaScripts" AfterTargets="Build">
+        <PropertyGroup>
+            <ScriptsDirectory>$(MSBuildProjectDirectory)\commands</ScriptsDirectory>
+            <ExpandedScriptsDirectory>$(OutputPath)scripts</ExpandedScriptsDirectory>
+        </PropertyGroup>
+        
+        <ExpandLuaScriptsTask 
+            ScriptsDirectory="$(ScriptsDirectory)" 
+            OutputDirectory="$(ExpandedScriptsDirectory)" />
+    </Target>
+
 </Project>
