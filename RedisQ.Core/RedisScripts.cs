@@ -24,29 +24,6 @@ public class RedisScripts
         _keys = _queueKeys.GetKeys(queueName);
         _scriptLoader = new ScriptLoader();
         _commands = new Dictionary<string, Command>();
-
-        // Initialize scripts asynchronously
-        _ = Task.Run(async () => await LoadScriptsAsync());
-    }
-
-    private async Task LoadScriptsAsync()
-    {
-        try
-        {
-            var scriptsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "commands");
-            
-            var commands = await _scriptLoader.LoadScriptsAsync(scriptsPath);
-            
-            foreach (var command in commands)
-            {
-                _commands[command.Name] = command;
-            }
-        }
-        catch (Exception ex)
-        {
-            // Log error or handle as appropriate
-            Console.WriteLine($"Failed to load scripts: {ex.Message}");
-        }
     }
 
     public void ResetQueueKeys(string queueName)
@@ -55,10 +32,7 @@ public class RedisScripts
     }
 
     private string GetScript(string scriptName)
-    {
-        // Ensure scripts are loaded before attempting to get them
-        EnsureScriptsLoaded();
-        
+    {   
         if (_commands.TryGetValue(scriptName.Replace(".lua", ""), out var command))
         {
             return command.Options.Lua;
@@ -71,15 +45,6 @@ public class RedisScripts
             scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "commands", scriptName);
         }
         return File.Exists(scriptPath) ? File.ReadAllText(scriptPath) : string.Empty;
-    }
-
-    private void EnsureScriptsLoaded()
-    {
-        // Simple synchronous check - in production you might want a more sophisticated approach
-        if (_commands.Count == 0)
-        {
-            LoadScriptsAsync().GetAwaiter().GetResult();
-        }
     }
 
     public RedisKey[] GetKeys(params string[] keyNames)

@@ -7,7 +7,6 @@ namespace RedisQ.Core.Loader;
 public class ScriptLoader
 {
     private readonly Dictionary<string, string> _pathMapper = new();
-    private readonly Dictionary<string, Command[]> _commandCache = new();
     private readonly string _rootPath;
 
     private static readonly Regex IncludeRegex = new(@"^[-]{2,3}[ \t]*@include[ \t]+([""'])(.+?)\1[; \t\n]*$", RegexOptions.Multiline);
@@ -22,19 +21,14 @@ public class ScriptLoader
     }
 
     /// <summary>
-    /// Load all lua scripts from a directory
+    /// Load all lua scripts from a directory and save them to an "exported" subdirectory.
     /// </summary>
     /// <param name="dir">Directory containing the scripts</param>
     /// <param name="cache">Cache for script metadata</param>
-    /// <returns>Array of loaded commands</returns>
-    public async Task<Command[]> LoadScriptsAsync(string? dir = null, Dictionary<string, ScriptMetadata>? cache = null)
+    /// <returns></returns>
+    public async Task LoadScriptsAsync(string? dir = null, Dictionary<string, ScriptMetadata>? cache = null)
     {
         dir = Path.GetFullPath(dir ?? AppDomain.CurrentDomain.BaseDirectory);
-
-        if (_commandCache.TryGetValue(dir, out var commands))
-        {
-            return commands;
-        }
 
         if (!Directory.Exists(dir))
         {
@@ -48,36 +42,30 @@ public class ScriptLoader
             throw new ScriptLoaderException("No .lua files found!", dir);
         }
 
-        var commandList = new List<Command>();
         cache ??= new Dictionary<string, ScriptMetadata>();
+
+        // Create exported directory
+        var exportedDir = Path.Combine(dir, "exported");
+        Directory.CreateDirectory(exportedDir);
 
         foreach (var file in files)
         {
             var command = await LoadCommandAsync(file, cache);
-            commandList.Add(command);
+
+            // Save the expanded script to the exported directory
+            var fileName = Path.GetFileName(file);
+            var exportedFilePath = Path.Combine(exportedDir, fileName);
+            await File.WriteAllTextAsync(exportedFilePath, command);
         }
-
-        commands = commandList.ToArray();
-        _commandCache[dir] = commands;
-
-        return commands;
     }
 
-    /// <summary>
-    /// Clear the command cache
-    /// </summary>
-    public void ClearCache()
-    {
-        _commandCache.Clear();
-    }
-    
     /// <summary>
     /// Load a single command from a file
     /// </summary>
     /// <param name="filename">The filename to load</param>
     /// <param name="cache">Cache for script metadata</param>
     /// <returns>The loaded command</returns>
-    public async Task<Command> LoadCommandAsync(string filename, Dictionary<string, ScriptMetadata>? cache = null)
+    private async Task<string> LoadCommandAsync(string filename, Dictionary<string, ScriptMetadata>? cache = null)
     {
         filename = Path.GetFullPath(filename);
 
@@ -89,19 +77,9 @@ public class ScriptLoader
             script = await ParseScriptAsync(filename, content, cache);
         }
 
-        var lua = RemoveEmptyLines(Interpolate(script));
-        var name = script.Name;
-        var numberOfKeys = script.NumberOfKeys ?? 0;
+        var luaCommand = RemoveEmptyLines(Interpolate(script));
 
-        return new Command
-        {
-            Name = name,
-            Options = new CommandOptions
-            {
-                NumberOfKeys = numberOfKeys,
-                Lua = lua
-            }
-        };
+        return luaCommand;
     }
 
     /// <summary>
