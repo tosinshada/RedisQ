@@ -13,15 +13,6 @@
       <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.8" />
     </ItemGroup>
 
-    <ItemGroup>
-        <AdditionalFiles Include="commands/**/*.lua" />
-        <AdditionalFiles Include="commands/*.lua" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <EmbeddedResource Include="commands\**\*.lua" />
-    </ItemGroup>
-
     <!-- Define the custom task -->
     <UsingTask TaskName="RedisQ.Core.BuildTasks.ExpandLuaScriptsTask" AssemblyFile="$(OutputPath)\RedisQ.Core.dll" />
 
