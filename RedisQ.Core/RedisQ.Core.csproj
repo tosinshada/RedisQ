@@ -4,28 +4,25 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="MessagePack" Version="3.1.4" />
-      <PackageReference Include="StackExchange.Redis" Version="2.8.41" />
-      <PackageReference Include="Microsoft.Build.Framework" Version="17.11.31" />
-      <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.11.31" />
+        <PackageReference Include="MessagePack" Version="3.1.4"/>
+        <PackageReference Include="StackExchange.Redis" Version="2.8.41"/>
+        <PackageReference Include="Microsoft.Build.Framework" Version="17.11.31"/>
+        <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.11.31"/>
     </ItemGroup>
 
-    <!-- Define the custom task -->
-    <UsingTask TaskName="RedisQ.Core.BuildTasks.ExpandLuaScriptsTask" AssemblyFile="$(OutputPath)\RedisQ.Core.dll" />
+    <ItemGroup>
+        <ProjectReference Include="..\RedisQ.SourceGenerators\RedisQ.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
 
-    <!-- Target to expand Lua scripts -->
-    <Target Name="ExpandLuaScripts" AfterTargets="Build">
-        <PropertyGroup>
-            <ScriptsDirectory>$(MSBuildProjectDirectory)\commands</ScriptsDirectory>
-            <ExpandedScriptsDirectory>$(OutputPath)scripts</ExpandedScriptsDirectory>
-        </PropertyGroup>
-        
-        <ExpandLuaScriptsTask 
-            ScriptsDirectory="$(ScriptsDirectory)" 
-            OutputDirectory="$(ExpandedScriptsDirectory)" />
-    </Target>
+    <ItemGroup>
+        <AdditionalFiles Include="commands\includes\*.lua"/>
+        <AdditionalFiles Include="commands\*.lua"/>
+    </ItemGroup>
 
 </Project>

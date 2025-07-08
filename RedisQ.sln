@@ -1,8 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedisQ.Core", "RedisQ.Core\RedisQ.Core.csproj", "{C5456439-6407-4CF3-8027-41335B6D0E19}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleTest", "ConsoleTest\ConsoleTest.csproj", "{EF46C700-4D02-47B0-98D8-03AD8DFF387A}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedisQ.SourceGenerators", "RedisQ.SourceGenerators\RedisQ.SourceGenerators.csproj", "{A1B2C3D4-5E6F-7890-1234-567890ABCDEF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedisQ.Core.Tests", "RedisQ.Core.Tests\RedisQ.Core.Tests.csproj", "{B1C2D3E4-5F6A-7B8C-9D0E-1F2A3B4C5D6E}"
@@ -17,10 +15,6 @@ Global
 		{C5456439-6407-4CF3-8027-41335B6D0E19}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C5456439-6407-4CF3-8027-41335B6D0E19}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C5456439-6407-4CF3-8027-41335B6D0E19}.Release|Any CPU.Build.0 = Release|Any CPU
-		{EF46C700-4D02-47B0-98D8-03AD8DFF387A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{EF46C700-4D02-47B0-98D8-03AD8DFF387A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EF46C700-4D02-47B0-98D8-03AD8DFF387A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{EF46C700-4D02-47B0-98D8-03AD8DFF387A}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A1B2C3D4-5E6F-7890-1234-567890ABCDEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1B2C3D4-5E6F-7890-1234-567890ABCDEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-5E6F-7890-1234-567890ABCDEF}.Release|Any CPU.ActiveCfg = Release|Any CPU

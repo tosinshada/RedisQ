@@ -6,3 +6,5 @@ riderModule.iml
 
 # Rider specific files
 .idea/
+
+.DS_Store
