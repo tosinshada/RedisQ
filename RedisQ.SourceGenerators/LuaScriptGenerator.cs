@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace RedisQ.SourceGenerators;
 
+// [Todo] - Consider using this source generator when the lag in jetbrain rider is figured out
 [Generator]
 public class LuaScriptGenerator : IIncrementalGenerator
 {
