@@ -9,8 +9,8 @@
     <ItemGroup>
       <PackageReference Include="MessagePack" Version="3.1.4" />
       <PackageReference Include="StackExchange.Redis" Version="2.8.41" />
-      <PackageReference Include="Microsoft.Build.Framework" Version="17.14.8" />
-      <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.8" />
+      <PackageReference Include="Microsoft.Build.Framework" Version="17.11.31" />
+      <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.11.31" />
     </ItemGroup>
 
     <!-- Define the custom task -->
