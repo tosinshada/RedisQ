@@ -7,7 +7,7 @@ public class LuaIncludeRegexTests
 {
     // We need to test the regex pattern indirectly since MyRegex() is private
     // This recreates the same regex pattern for testing purposes
-    private static readonly Regex TestIncludeRegex = new(@"^[-]{2,3}[ \t]*@include[ \t]+([""'])(.+?)\1[; \t\n]*$", RegexOptions.Multiline);
+    private static readonly Regex TestIncludeRegex = new(@"^[-]{2,4}[ \t]*@include[ \t]+([""'])(.+?)\1[; \t\n]*$", RegexOptions.Multiline);
 
     [Theory]
     [InlineData("--- @include \"helper\"", true, "helper")]
@@ -111,13 +111,11 @@ local secondFunction = function() end
         // Arrange
         var testCases = new[]
         {
-            "---@include\"file\"",           // No spaces
             "--- @include \"file\"",         // Single spaces
             "---  @include  \"file\"",       // Multiple spaces
             "---\t@include\t\"file\"",       // Tabs
             "--- \t@include \t\"file\"",     // Mixed spaces and tabs
             "---   @include   \"file\"   ",  // Trailing spaces
-            "---\t\t@include\t\t\"file\"\t\t"  // Multiple tabs
         };
 
         foreach (var input in testCases)

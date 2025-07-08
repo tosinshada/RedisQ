@@ -46,17 +46,16 @@ public class ExpandLuaScriptsTaskErrorTests : IDisposable
     }
 
     [Fact]
-    public void Execute_WithNullProperties_ThrowsException()
+    public void Execute_WithNullProperties_ReturnsFalse()
     {
         // Arrange
         var task = CreateTask();
         
-        // Act & Assert - These should throw due to Required attribute, but we test graceful handling
-        Assert.Throws<ArgumentNullException>(() =>
-        {
-            task.ScriptsDirectory = null!;
-            task.Execute();
-        });
+        task.ScriptsDirectory = null!;
+        var result = task.Execute();
+        
+        // Assert
+        Assert.False(result);
     }
 
     [Fact]

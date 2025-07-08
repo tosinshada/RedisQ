@@ -153,6 +153,6 @@ public partial class ExpandLuaScriptsTask : MSBuildTask
         return $"{filename}{ext}";
     }
 
-    [GeneratedRegex(@"^[-]{2,3}[ \t]*@include[ \t]+([""'])(.+?)\1[; \t\n]*$", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^[-]{2,4}[ \t]*@include[ \t]+([""'])(.+?)\1[; \t\n]*$", RegexOptions.Multiline)]
     private static partial Regex MyRegex();
 }
