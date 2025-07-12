@@ -3,7 +3,7 @@ namespace RedisQ.Core;
 public class Job
 {
     public string? Id { get; set; }
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; set; }
     public object? Data { get; set; }
     public Dictionary<string, object> Options { get; set; } = new();
     public long Timestamp { get; set; }

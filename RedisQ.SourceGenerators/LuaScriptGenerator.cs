@@ -103,10 +103,11 @@ public class LuaScriptGenerator : IIncrementalGenerator
                 foundPath = fileContent.Keys.FirstOrDefault(k => k.Replace('\\', '/') == relativePath);
             }
 
+            // Prevent circular reference or reprocessing of the same file
             if (processedFiles.Contains(foundPath ?? includePath))
             {
                 // Already processed, remove the include directive
-                content = content.Replace(match.Value, "");
+                content = content.Replace(match.Value, "-- Include already processed: " + reference);
                 continue;
             }
 
