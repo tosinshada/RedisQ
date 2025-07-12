@@ -112,15 +112,20 @@ public class RedisScripts
     public async Task<RedisResult> GetCountsAsync(params string[] types)
     {
         var transformedTypes = types.Select(type => type == "waiting" ? "wait" : type).ToArray();
+        
+        // Convert to RedisValue array for StackExchange.Redis compatibility
+        var redisValueTypes = transformedTypes.Select(t => (RedisValue)t).ToArray();
 
         var parameters = new
         {
             prefix = _keys[""],
-            types = transformedTypes
+            types = redisValueTypes
         };
 
         var preparedScript = LuaScript.Prepare(LuaScript_getCounts.Content);
-        return await _database.ScriptEvaluateAsync(preparedScript, parameters);
+        var result = await _database.ScriptEvaluateAsync(preparedScript, parameters);
+
+        return result;
     }
     
     // Retry a failed job
@@ -132,7 +137,7 @@ public class RedisScripts
 
         var fieldsToUpdate = options?.ContainsKey("fieldsToUpdate") == true 
             ? MessagePackSerializer.Serialize(ObjectToFlatArray(options["fieldsToUpdate"]))
-            : new byte[0];
+            : [];
 
         var parameters = new
         {
@@ -170,13 +175,19 @@ public class RedisScripts
     public async Task<RedisResult> MoveToActiveAsync(string workerToken, int lockDuration, 
         string workerName, Dictionary<string, object>? limiter = null)
     {
-        var packedOpts = MessagePackSerializer.Serialize(new
+        var optsData = new Dictionary<string, object>
         {
-            token = workerToken,
-            lockDuration,
-            limiter,
-            name = workerName
-        });
+            ["token"] = workerToken,
+            ["lockDuration"] = lockDuration,
+            ["name"] = workerName
+        };
+
+        if (limiter != null)
+        {
+            optsData["limiter"] = limiter;
+        }
+
+        var packedOpts = MessagePackSerializer.Serialize(optsData);
 
         var parameters = new
         {

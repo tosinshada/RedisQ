@@ -107,7 +107,7 @@ public class LuaScriptGenerator : IIncrementalGenerator
             if (processedFiles.Contains(foundPath ?? includePath))
             {
                 // Already processed, remove the include directive
-                content = content.Replace(match.Value, "-- Include already processed: " + reference);
+                content = content.Replace(match.Value, "");
                 continue;
             }
 
