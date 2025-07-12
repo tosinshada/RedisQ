@@ -62,11 +62,41 @@ public class RedisScripts
     // Add a standard job to the queue
     public async Task<RedisResult> AddStandardJobAsync(Job job, long timestamp)
     {
-        var keys = GetKeys("wait", "paused", "meta", "id", "completed",
-                          "delayed", "active", "events", "marker");
-        var args = AddJobArgs(job).Concat([timestamp]).ToArray();
+        // Serialize job data with compact JSON
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = false,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+        var jsonData = JsonSerializer.Serialize(job.Data, jsonOptions);
 
-        return await _database.ScriptEvaluateAsync(LuaScript_addStandardJob.Content, keys, args);
+        // Pack job options using MessagePack
+        var packedOpts = MessagePackSerializer.Serialize(job.Options);
+
+        var parameters = new
+        {
+            waitKey = _keys["wait"],
+            pausedKey = _keys["paused"],
+            metaKey = _keys["meta"],
+            idKey = _keys["id"],
+            completedKey = _keys["completed"],
+            delayedKey = _keys["delayed"],
+            activeKey = _keys["active"],
+            eventsKey = _keys["events"],
+            markerKey = _keys["marker"],
+            keyPrefix = _keys[""],
+            customId = job.Id ?? "",
+            jobName = job.Name,
+            timestamp,
+            repeatJobKey = "", // TODO: Add support for repeat jobs
+            deduplicationKey = "", // TODO: Add support for deduplication
+            jobData = jsonData,
+            jobOptions = packedOpts
+        };
+
+        var preparedScript = LuaScript.Prepare(LuaScript_addStandardJob.Content);
+
+        return await _database.ScriptEvaluateAsync(preparedScript, parameters);
     }
 
     // // Add a delayed job to the queue

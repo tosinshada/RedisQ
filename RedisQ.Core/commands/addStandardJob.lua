@@ -17,45 +17,33 @@
          - prioritized.
       - Adds the job to the "added" list so that workers gets notified.
 
-    Input:
-      KEYS[1] 'wait',
-      KEYS[2] 'paused'
-      KEYS[3] 'meta'
-      KEYS[4] 'id'
-      KEYS[5] 'completed'
-      KEYS[6] 'delayed'
-      KEYS[7] 'active'
-      KEYS[8] events stream key
-      KEYS[9] marker key
-
-      ARGV[1] msgpacked arguments array
-            [1]  key prefix,
-            [2]  custom id (will not generate one automatically)
-            [3]  name
-            [4]  timestamp
-            [5]  repeat job key
-            [6]  deduplication key
-
-      ARGV[2] Json stringified job data
-      ARGV[3] msgpacked options
+    Input Parameters:
+      @waitKey - wait queue key
+      @pausedKey - paused queue key  
+      @metaKey - meta key
+      @idKey - id counter key
+      @completedKey - completed queue key
+      @delayedKey - delayed queue key
+      @activeKey - active queue key
+      @eventsKey - events stream key
+      @markerKey - marker key
+      @keyPrefix - key prefix for job keys
+      @customId - custom job id (optional, will generate if empty)
+      @jobName - job name
+      @timestamp - job timestamp
+      @deduplicationKey - deduplication key (optional)
+      @jobData - JSON stringified job data
+      @jobOptions - msgpacked job options
 
       Output:
         jobId  - OK
         -1     - Job already exists
 ]]
-local eventsKey = KEYS[8]
 
 local jobId
 local jobIdKey
 local rcall = redis.call
-
-local args = cmsgpack.unpack(ARGV[1])
-
-local data = ARGV[2]
-local opts = cmsgpack.unpack(ARGV[3])
-
-local repeatJobKey = args[5]
-local deduplicationKey = args[6]
+local opts = cmsgpack.unpack(@jobOptions)
 
 -- Includes
 --- @include "includes/addJobInTargetList"
@@ -64,40 +52,38 @@ local deduplicationKey = args[6]
 --- @include "includes/getTargetQueueList"
 --- @include "includes/storeJob"
 
-local jobCounter = rcall("INCR", KEYS[4])
+local jobCounter = rcall("INCR", @idKey)
 
-local metaKey = KEYS[3]
-local maxEvents = getOrSetMaxEvents(metaKey)
+local maxEvents = getOrSetMaxEvents(@metaKey)
 
-local timestamp = args[4]
-if args[2] == "" then
+if @customId == "" then
     jobId = jobCounter
-    jobIdKey = args[1] .. jobId
+    jobIdKey = @keyPrefix .. jobId
 else
-    jobId = args[2]
-    jobIdKey = args[1] .. jobId
+    jobId = @customId
+    jobIdKey = @keyPrefix .. jobId
     if rcall("EXISTS", jobIdKey) == 1 then
         return -1 -- Job already exists
     end
 end
 
-local deduplicationJobId = deduplicateJob(opts['de'], jobId, KEYS[6],
-  deduplicationKey, eventsKey, maxEvents, args[1])
+local deduplicationJobId = deduplicateJob(opts['de'], jobId, @delayedKey,
+  @deduplicationKey, @eventsKey, maxEvents, @keyPrefix)
 if deduplicationJobId then
   return deduplicationJobId
 end
 
 -- Store the job.
-storeJob(eventsKey, jobIdKey, jobId, args[3], ARGV[2], opts, timestamp, repeatJobKey)
+storeJob(@eventsKey, jobIdKey, jobId, @jobName, @jobData, opts, @timestamp)
 
-local target, isPausedOrMaxed = getTargetQueueList(metaKey, KEYS[7], KEYS[1], KEYS[2])
+local target, isPausedOrMaxed = getTargetQueueList(@metaKey, @activeKey, @waitKey, @pausedKey)
 
 -- LIFO or FIFO
 local pushCmd = opts['lifo'] and 'RPUSH' or 'LPUSH'
-addJobInTargetList(target, KEYS[9], pushCmd, isPausedOrMaxed, jobId)
+addJobInTargetList(target, @markerKey, pushCmd, isPausedOrMaxed, jobId)
 
 -- Emit waiting event
-rcall("XADD", eventsKey, "MAXLEN", "~", maxEvents, "*", "event", "waiting",
+rcall("XADD", @eventsKey, "MAXLEN", "~", maxEvents, "*", "event", "waiting",
       "jobId", jobId)
 
 return jobId .. "" -- convert to string

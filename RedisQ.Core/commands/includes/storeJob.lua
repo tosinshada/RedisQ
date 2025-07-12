@@ -5,17 +5,13 @@
   Function to store a job
 ]]
 local function storeJob(eventsKey, jobIdKey, jobId, name, data, 
-                        opts, timestamp, repeatJobKey)
+                        opts, timestamp)
     local jsonOpts = cjson.encode(opts)
     local delay = opts['delay'] or 0
     local priority = opts['priority'] or 0
     local debounceId = opts['de'] and opts['de']['id']
 
     local optionalValues = {}
-    if repeatJobKey then
-        table.insert(optionalValues, "rjk")
-        table.insert(optionalValues, repeatJobKey)
-    end
 
     if debounceId then
         table.insert(optionalValues, "deid")
