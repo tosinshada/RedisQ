@@ -86,46 +86,29 @@ public class RedisScripts
         // Pack job options using MessagePack
         var packedOpts = MessagePackSerializer.Serialize(job.Options);
 
-        var parameters = new
+        var keys = GetKeys("marker", "meta", "id", "delayed", "completed", "events", "");
+
+        var args = new RedisValue[]
         {
-            markerKey = _keys["marker"],
-            metaKey = _keys["meta"],
-            idKey = _keys["id"],
-            delayedKey = _keys["delayed"],
-            completedKey = _keys["completed"],
-            eventsKey = _keys["events"],
-            keyPrefix = _keys[""],
-            customId = job.Id ?? "",
-            jobName = job.Name,
-            timestamp,
-            repeatJobKey = "", // TODO: Add support for repeat jobs
-            deduplicationKey = "", // TODO: Add support for deduplication
-            jobData = jsonData,
-            jobOptions = packedOpts
+            _keys[""],            // ARGV[1] - keyPrefix
+            job.Id ?? "",         // ARGV[2] - customId
+            job.Name,             // ARGV[3] - jobName
+            timestamp,            // ARGV[4] - timestamp
+            jsonData,             // ARGV[5] - jobData
+            packedOpts            // ARGV[6] - jobOptions
         };
 
-        var preparedScript = LuaScript.Prepare(LuaScript_addDelayedJob.Content);
-        return await _database.ScriptEvaluateAsync(preparedScript, parameters);
+        return await _database.ScriptEvaluateAsync(LuaScript_addDelayedJob.Content, keys, args);
     }
     
     // Get job counts by type
     public async Task<RedisResult> GetCountsAsync(params string[] types)
     {
-        var transformedTypes = types.Select(type => type == "waiting" ? "wait" : type).ToArray();
-        
-        // Convert to RedisValue array for StackExchange.Redis compatibility
-        var redisValueTypes = transformedTypes.Select(t => (RedisValue)t).ToArray();
+        var keys = GetKeys("");
 
-        var parameters = new
-        {
-            prefix = _keys[""],
-            types = redisValueTypes
-        };
+        var args = types.Select(t => (RedisValue)t).ToArray();
 
-        var preparedScript = LuaScript.Prepare(LuaScript_getCounts.Content);
-        var result = await _database.ScriptEvaluateAsync(preparedScript, parameters);
-
-        return result;
+        return await _database.ScriptEvaluateAsync(LuaScript_getCounts.Content, keys, args);
     }
     
     // Retry a failed job

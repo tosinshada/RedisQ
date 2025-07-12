@@ -1,6 +1,5 @@
 using FluentAssertions;
 using StackExchange.Redis;
-using System.Text.Json;
 using Xunit;
 
 namespace RedisQ.Core.Tests;
@@ -162,7 +161,7 @@ public class RedisScriptsTests : RedisTestBase
         await redisScripts.AddDelayedJobAsync(CreateTestJob(), delayedTimestamp);
 
         // Act
-        var result = await redisScripts.GetCountsAsync("waiting", "delayed", "completed");
+        var result = await redisScripts.GetCountsAsync("wait", "delayed", "completed");
 
         // Assert
         result.Should().NotBeNull();
@@ -180,10 +179,10 @@ public class RedisScriptsTests : RedisTestBase
         var redisScripts = CreateRedisScripts();
 
         // Act
-        var result = await redisScripts.GetCountsAsync("waiting", "active", "completed");
+        var result = await redisScripts.GetCountsAsync("wait", "active", "completed");
 
         // Assert
-        var counts = (RedisValue[])result;
+        var counts = (RedisValue[])result!;
         counts.Should().HaveCount(3);
         counts.Should().AllSatisfy(count => ((int)count).Should().Be(0));
     }
