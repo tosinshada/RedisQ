@@ -30,9 +30,9 @@ public class RedisScripts
         _keys = _queueKeys.GetKeys(queueName);
     }
 
-    private string ToKey(string? suffix)
+    private RedisKey ToKey(string? suffix)
     {
-        return _queueKeys.ToKey(_queueName, suffix ?? string.Empty);
+        return (RedisKey)_queueKeys.ToKey(_queueName, suffix ?? string.Empty);
     }
     
     /// <summary>
@@ -223,28 +223,26 @@ public class RedisScripts
         {
             throw new ArgumentException("Job ID cannot be null", nameof(job));
         }
-
-        var keys = GetKeys();
-
+        
         var metricsKey = ToKey($"metrics:{target}");
 
         var keyArray = GetKeys(
-            "wait",
-            "active",
-            "prioritized",
-            "events",
-            "stalled",
-            "limiter",
-            "delayed",
-            "paused",
-            "meta",
-            "pc",
-            target,
-            ToKey(job.Id),
-            metricsKey,
-            "marker"
-        );
-
+                "wait",
+                "active",
+                "prioritized",
+                "events",
+                "stalled",
+                "limiter",
+                "delayed",
+                "paused",
+                "meta",
+                "pc",
+                target
+            ).Append(ToKey(job.Id))
+            .Append(metricsKey)
+            .Append(_keys["marker"])
+            .ToArray();
+        
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var jsonValue = returnValue != null ? JsonSerializer.Serialize(returnValue) : "";
 

@@ -354,11 +354,12 @@ public class RedisScriptsTests : RedisTestBase
         
         // Add job and move to active
         await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync(
+        
+        var activeJobResult = await redisScripts.MoveToActiveAsync(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
-                { "lockDuration", 3000 },
+                { "lockDuration", 30000 },
                 { "limiter", null },
                 { "workerName", "TestWorker" }
             });
