@@ -27,16 +27,14 @@
       KEYS[7] events stream key
       KEYS[8] marker key
 
-      ARGV[1] msgpacked arguments array
-            [1]  key prefix,
-            [2]  custom id (optional, will generate if empty)
-            [3]  name
-            [4]  timestamp
-            [5]  repeat job key
-            [6] deduplication key
-
-      ARGV[2] Json stringified job data
-      ARGV[3] msgpacked options
+      ARGV[1] key prefix
+      ARGV[2] custom id (optional, will generate if empty)
+      ARGV[3] name
+      ARGV[4] timestamp
+      ARGV[5] repeat job key (optional)
+      ARGV[6] deduplication key (optional)
+      ARGV[7] Json stringified job data
+      ARGV[8] msgpacked options
 
       Output:
         jobId  - OK
@@ -50,13 +48,14 @@ local jobId
 local jobIdKey
 local rcall = redis.call
 
-local args = cmsgpack.unpack(ARGV[1])
-local data = ARGV[2]
-local opts = cmsgpack.unpack(ARGV[3])
-
-local timestamp = args[4]
-local repeatJobKey = args[5]
-local deduplicationKey = args[6]
+local keyPrefix = ARGV[1]
+local customId = ARGV[2]
+local jobName = ARGV[3]
+local timestamp = ARGV[4]
+local repeatJobKey = ARGV[5]
+local deduplicationKey = ARGV[6]
+local data = ARGV[7]
+local opts = cmsgpack.unpack(ARGV[8])
 
 -- Includes
 --- @include "includes/addJobInTargetList"
@@ -69,12 +68,12 @@ local jobCounter = rcall("INCR", KEYS[4])
 
 local maxEvents = getOrSetMaxEvents(metaKey)
 
-if args[2] == "" then
+if customId == "" then
     jobId = jobCounter
-    jobIdKey = args[1] .. jobId
+    jobIdKey = keyPrefix .. jobId
 else
-    jobId = args[2]
-    jobIdKey = args[1] .. jobId
+    jobId = customId
+    jobIdKey = keyPrefix .. jobId
     if rcall("EXISTS", jobIdKey) == 1 then
         rcall("XADD", eventsKey, "MAXLEN", "~", maxEvents, "*", "event",
           "duplicated", "jobId", jobId)
@@ -83,13 +82,13 @@ else
 end
 
 local deduplicationJobId = deduplicateJob(opts['de'], jobId, KEYS[5],
-  deduplicationKey, eventsKey, maxEvents, ARGS[1])
+  deduplicationKey, eventsKey, maxEvents, keyPrefix)
 if deduplicationJobId then
   return deduplicationJobId
 end
 
 -- Store the job.
-storeJob(eventsKey, jobIdKey, jobId, args[3], ARGV[2], opts, timestamp)
+storeJob(eventsKey, jobIdKey, jobId, jobName, data, opts, timestamp)
 
 local target, isPausedOrMaxed = getTargetQueueList(metaKey, KEYS[6], KEYS[1], KEYS[2])
 

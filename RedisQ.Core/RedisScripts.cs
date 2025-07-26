@@ -51,12 +51,19 @@ public class RedisScripts
             "marker"
         );
         
-        var (args, jsonData, opts) = PrepareJobArgs(job);
+        var jsonData = JsonSerializer.Serialize(job.Data);
+        var packedOpts = MessagePackSerializer.Serialize(job.Options);
+        
         var argArray = new RedisValue[]
         {
-            args,
-            jsonData,
-            opts
+            _keys[""],           // key prefix
+            job.Id ?? "",        // custom id
+            job.Name,            // name
+            timestamp.ToString(), // timestamp
+            "",                  // repeat job key (optional)
+            "",                  // deduplication key (optional)
+            jsonData,            // JSON stringified job data
+            packedOpts           // msgpacked options
         };
         
         var result = await _database.ScriptEvaluateAsync(
@@ -82,15 +89,17 @@ public class RedisScripts
             "events"
         );
         
-        var jobArgs = PrepareJobArgs(job);
+        var jsonData = JsonSerializer.Serialize(job.Data);
+        var packedOpts = MessagePackSerializer.Serialize(job.Options);
+        
         var argArray = new RedisValue[]
         {
-            _keys[""],  // keyPrefix
-            job.Id ?? "",  // customId
-            job.Name,  // jobName
-            timestamp.ToString(),  // timestamp
-            jobArgs.Item2,  // JSON stringified job data
-            jobArgs.Item3   // msgpacked job options
+            _keys[""],           // keyPrefix
+            job.Id ?? "",        // customId
+            job.Name,            // jobName
+            timestamp.ToString(), // timestamp
+            jsonData,            // JSON stringified job data
+            packedOpts           // msgpacked job options
         };
         
         var result = await _database.ScriptEvaluateAsync(
