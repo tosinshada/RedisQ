@@ -7,19 +7,22 @@ namespace RedisQ.Core;
 
 public class RedisScripts
 {
-    private readonly string _prefix;
-    private readonly string _queueName;
-    private readonly IDatabase _database;
     private readonly QueueKeys _queueKeys;
     private Dictionary<string, string> _keys;
-
+    private readonly string _queueName;
+    private readonly IDatabase _database;
+    
     public RedisScripts(string prefix, string queueName, IDatabase database)
     {
-        _prefix = prefix;
-        _queueName = queueName;
-        _database = database;
         _queueKeys = new QueueKeys(prefix);
         _keys = _queueKeys.GetKeys(queueName);
+        _queueName = queueName;
+        _database = database;
+    }
+
+    public RedisKey[] GetKeys(params string[] keyNames)
+    {
+        return [.. keyNames.Select(key => (RedisKey)_keys[key])];
     }
 
     public void ResetQueueKeys(string queueName)
@@ -27,257 +30,336 @@ public class RedisScripts
         _keys = _queueKeys.GetKeys(queueName);
     }
 
-    public RedisKey[] GetKeys(params string[] keyNames)
+    private string ToKey(string? suffix)
     {
-        return keyNames.Select(key => (RedisKey)_keys[key]).ToArray();
+        return _queueKeys.ToKey(_queueName, suffix ?? string.Empty);
     }
-
-    // Add a standard job to the queue
+    
+    /// <summary>
+    /// Add a standard job to the queue
+    /// </summary>
     public async Task<RedisResult> AddStandardJobAsync(Job job, long timestamp)
     {
-        // Serialize job data with compact JSON
-        var jsonOptions = new JsonSerializerOptions
+        var keyArray = GetKeys(
+            "wait", 
+            "paused", 
+            "meta", 
+            "id", 
+            "delayed", 
+            "active", 
+            "events", 
+            "marker"
+        );
+        
+        var (args, jsonData, opts) = PrepareJobArgs(job);
+        var argArray = new RedisValue[]
         {
-            WriteIndented = false,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            args,
+            jsonData,
+            opts
         };
-        var jsonData = JsonSerializer.Serialize(job.Data, jsonOptions);
-
-        // Pack job options using MessagePack
-        var packedOpts = MessagePackSerializer.Serialize(job.Options);
-
-        var parameters = new
-        {
-            waitKey = _keys["wait"],
-            pausedKey = _keys["paused"],
-            metaKey = _keys["meta"],
-            idKey = _keys["id"],
-            completedKey = _keys["completed"],
-            delayedKey = _keys["delayed"],
-            activeKey = _keys["active"],
-            eventsKey = _keys["events"],
-            markerKey = _keys["marker"],
-            keyPrefix = _keys[""],
-            customId = job.Id ?? "",
-            jobName = job.Name,
-            timestamp,
-            repeatJobKey = "", // TODO: Add support for repeat jobs
-            deduplicationKey = "", // TODO: Add support for deduplication
-            jobData = jsonData,
-            jobOptions = packedOpts
-        };
-
-        var preparedScript = LuaScript.Prepare(LuaScript_addStandardJob.Content);
-
-        return await _database.ScriptEvaluateAsync(preparedScript, parameters);
+        
+        var result = await _database.ScriptEvaluateAsync(
+            LuaScript_addStandardJob.Content,
+            keyArray,
+            argArray
+        );
+        
+        return result;
     }
-
-    // Add a delayed job to the queue
+    
+    /// <summary>
+    /// Add a delayed job to the queue
+    /// </summary>
     public async Task<RedisResult> AddDelayedJobAsync(Job job, long timestamp)
     {
-        // Serialize job data with compact JSON
-        var jsonOptions = new JsonSerializerOptions
+        var keyArray = GetKeys(
+            "marker", 
+            "meta", 
+            "id", 
+            "delayed", 
+            "completed", 
+            "events"
+        );
+        
+        var jobArgs = PrepareJobArgs(job);
+        var argArray = new RedisValue[]
         {
-            WriteIndented = false,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            _keys[""],  // keyPrefix
+            job.Id ?? "",  // customId
+            job.Name,  // jobName
+            timestamp.ToString(),  // timestamp
+            jobArgs.Item2,  // JSON stringified job data
+            jobArgs.Item3   // msgpacked job options
         };
-        var jsonData = JsonSerializer.Serialize(job.Data, jsonOptions);
-
-        // Pack job options using MessagePack
-        var packedOpts = MessagePackSerializer.Serialize(job.Options);
-
-        var keys = GetKeys("marker", "meta", "id", "delayed", "completed", "events", "");
-
-        var args = new RedisValue[]
-        {
-            _keys[""],            // ARGV[1] - keyPrefix
-            job.Id ?? "",         // ARGV[2] - customId
-            job.Name,             // ARGV[3] - jobName
-            timestamp,            // ARGV[4] - timestamp
-            jsonData,             // ARGV[5] - jobData
-            packedOpts            // ARGV[6] - jobOptions
-        };
-
-        return await _database.ScriptEvaluateAsync(LuaScript_addDelayedJob.Content, keys, args);
+        
+        var result = await _database.ScriptEvaluateAsync(
+            LuaScript_addDelayedJob.Content,
+            keyArray,
+            argArray
+        );
+        
+        return result;
     }
     
-    // Get job counts by type
-    public async Task<RedisResult> GetCountsAsync(params string[] types)
+    /// <summary>
+    /// Get counts of jobs in different states
+    /// </summary>
+    public async Task<RedisResult[]?> GetCountsAsync(params string[] types)
     {
-        var keys = GetKeys("");
+        var keyArray = new RedisKey[] { _keys[""] };
+        var argArray = types.Select(type => (RedisValue)(type == "waiting" ? "wait" : type)).ToArray();
 
-        var args = types.Select(t => (RedisValue)t).ToArray();
-
-        return await _database.ScriptEvaluateAsync(LuaScript_getCounts.Content, keys, args);
+        var result = await _database.ScriptEvaluateAsync(
+            LuaScript_getCounts.Content,
+            keyArray,
+            argArray
+        );
+        
+        return (RedisResult[]?)result;
     }
     
-    // Retry a failed job
-    public async Task<RedisResult> RetryJobAsync(string jobId, bool lifo, string token = "0",
-        Dictionary<string, object>? options = null)
+    /// <summary>
+    /// Move a job from wait to active state
+    /// </summary>
+    public async Task<RedisResult> MoveToActiveAsync(string token, Dictionary<string, object?> options)
     {
-        var jobKey = _queueKeys.ToKey(_queueName, jobId);
-        var pushCmd = lifo ? "RPUSH" : "LPUSH";
+        var keys = GetKeys();
 
-        var fieldsToUpdate = options?.ContainsKey("fieldsToUpdate") == true 
-            ? MessagePackSerializer.Serialize(ObjectToFlatArray(options["fieldsToUpdate"]))
-            : [];
-
-        var parameters = new
+        var keyArray = GetKeys(
+            "wait", 
+            "active", 
+            "prioritized", 
+            "events", 
+            "stalled", 
+            "limiter", 
+            "delayed", 
+            "paused", 
+            "meta", 
+            "pc", 
+            "marker"
+        );
+        
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var packedOptions = MessagePackSerializer.Serialize(new Dictionary<string, object?>
         {
-            activeKey = _keys["active"],
-            waitKey = _keys["wait"],
-            pausedKey = _keys["paused"],
-            jobKey,
-            metaKey = _keys["meta"],
-            eventsKey = _keys["events"],
-            delayedKey = _keys["delayed"],
-            prioritizedKey = _keys["prioritized"],
-            pcKey = _keys["pc"],
-            markerKey = _keys["marker"],
-            stalledKey = _keys["stalled"],
-            keyPrefix = _keys[""],
-            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            pushCmd,
-            jobId,
-            token,
+            { "token", token },
+            { "lockDuration", options["lockDuration"] },
+            { "limiter", options["limiter"] },
+            { "workerName", options["workerName"] }
+        });
+
+        var argArray = new RedisValue[]
+        {
+            _keys[""],
+            timestamp,
+            packedOptions
+        };
+        
+        var result = await _database.ScriptEvaluateAsync(
+            LuaScript_moveToActive.Content,
+            keyArray,
+            argArray
+        );
+        
+        return result;
+    }
+    
+    /// <summary>
+    /// Move a job to completed state
+    /// </summary>
+    public async Task<RedisResult> MoveToCompletedAsync(Job job, object? returnValue, 
+        bool removeOnComplete, string token, bool fetchNext = true,
+        Dictionary<string, object>? fieldsToUpdate = null)
+    {   
+        return await MoveToFinishedAsync(
+            job, 
+            returnValue, 
+            "returnvalue", 
+            removeOnComplete, 
+            "completed", 
+            token, 
+            fetchNext, 
             fieldsToUpdate
+        );
+    }
+
+    /// <summary>
+    /// Move a job to failed state
+    /// </summary>
+    public async Task<RedisResult> MoveToFailedAsync(Job job, object? returnValue, 
+        bool removeOnComplete, string token, bool fetchNext = true,
+        Dictionary<string, object>? fieldsToUpdate = null)
+    {
+        return await MoveToFinishedAsync(
+            job, 
+            returnValue, 
+            "failedReason", 
+            removeOnComplete,
+            "failed", 
+            token, 
+            fetchNext, 
+            fieldsToUpdate
+        );
+    }
+    
+    /// <summary>
+    /// Move a job to finished state (completed or failed)
+    /// </summary>
+    private async Task<RedisResult> MoveToFinishedAsync(Job job, object? returnValue, string propVal,
+        bool shouldRemove, string target, string token, bool fetchNext = true,
+        Dictionary<string, object>? fieldsToUpdate = null)
+    {
+        if (job.Id == null)
+        {
+            throw new ArgumentException("Job ID cannot be null", nameof(job));
+        }
+
+        var keys = GetKeys();
+
+        var metricsKey = ToKey($"metrics:{target}");
+
+        var keyArray = GetKeys(
+            "wait",
+            "active",
+            "prioritized",
+            "events",
+            "stalled",
+            "limiter",
+            "delayed",
+            "paused",
+            "meta",
+            "pc",
+            target,
+            ToKey(job.Id),
+            metricsKey,
+            "marker"
+        );
+
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var jsonValue = returnValue != null ? JsonSerializer.Serialize(returnValue) : "";
+
+        var keepJobsValue = shouldRemove ? new { count = 0 } : new { count = -1 };
+
+        var options = new Dictionary<string, object>
+        {
+            ["token"] = token,
+            ["keepJobs"] = keepJobsValue,
+            ["attempts"] = job.Attempts,
+            ["attemptsMade"] = job.AttemptsMade
         };
 
-        var preparedScript = LuaScript.Prepare(LuaScript_retryJob.Content);
-        var result = await _database.ScriptEvaluateAsync(preparedScript, parameters);
+        var packedOptions = MessagePackSerializer.Serialize(options);
 
-        if (result.Resp2Type == ResultType.Integer && (int)result < 0)
+        var argArray = new RedisValue[]
         {
-            throw CreateFinishedError((int)result, jobId, "retryJob", "active");
+            job.Id,
+            timestamp,
+            propVal,
+            jsonValue,
+            target,
+            fetchNext ? "1" : "",
+            _keys[""],
+            packedOptions
+        };
+
+        if (fieldsToUpdate != null)
+        {
+            var flatFields = FlattenDictionary(fieldsToUpdate);
+            var packedFields = MessagePackSerializer.Serialize(flatFields);
+            var newArgArray = argArray.ToList();
+            newArgArray.Add(packedFields);
+            argArray = newArgArray.ToArray();
         }
+
+        var result = await _database.ScriptEvaluateAsync(
+            LuaScript_moveToFinished.Content,
+            keyArray,
+            argArray
+        );
 
         return result;
     }
-
-    // Move next job to active state for processing
-    public async Task<RedisResult> MoveToActiveAsync(string workerToken, int lockDuration, 
-        string workerName, Dictionary<string, object>? limiter = null)
+    
+    /// <summary>
+    /// Retry a failed job
+    /// </summary>
+    public async Task<RedisResult> RetryJobAsync(string jobId, bool lifo, string token, 
+        Dictionary<string, object>? fieldsToUpdate = null)
     {
-        var optsData = new Dictionary<string, object>
-        {
-            ["token"] = workerToken,
-            ["lockDuration"] = lockDuration,
-            ["name"] = workerName
-        };
+        var keys = GetKeys();
 
-        if (limiter != null)
+        var keyArray = GetKeys(
+            "active", 
+            "wait", 
+            "paused", 
+            ToKey(jobId),
+            "meta", 
+            "events", 
+            "delayed", 
+            "prioritized", 
+            "pc", 
+            "marker", 
+            "stalled"
+        );
+        
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var pushCmd = lifo ? "RPUSH" : "LPUSH";
+        
+        var argArray = new List<RedisValue>
         {
-            optsData["limiter"] = limiter;
+            _keys[""],
+            timestamp,
+            pushCmd,
+            jobId,
+            token
+        };
+        
+        if (fieldsToUpdate != null)
+        {
+            var flatFields = FlattenDictionary(fieldsToUpdate);
+            argArray.Add(MessagePackSerializer.Serialize(flatFields));
         }
-
-        var packedOpts = MessagePackSerializer.Serialize(optsData);
-
-        var parameters = new
-        {
-            waitKey = _keys["wait"],
-            activeKey = _keys["active"],
-            prioritizedKey = _keys["prioritized"],
-            eventStreamKey = _keys["events"],
-            stalledKey = _keys["stalled"],
-            rateLimiterKey = _keys["limiter"],
-            delayedKey = _keys["delayed"],
-            pausedKey = _keys["paused"],
-            metaKey = _keys["meta"],
-            pcKey = _keys["pc"],
-            markerKey = _keys["marker"],
-            keyPrefix = _keys[""],
-            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            opts = packedOpts
-        };
-
-        var preparedScript = LuaScript.Prepare(LuaScript_moveToActive.Content);
-        return await _database.ScriptEvaluateAsync(preparedScript, parameters);
+        
+        var result = await _database.ScriptEvaluateAsync(
+            LuaScript_retryJob.Content,
+            keyArray,
+            argArray.ToArray()
+        );
+        
+        return result;
     }
     
-    // Move job to completed state
-    public async Task<RedisResult> MoveToCompletedAsync(Job job, object returnValue,
-        bool removeOnComplete, string token, bool fetchNext = true)
+    private (byte[], string, byte[]) PrepareJobArgs(Job job)
     {
-        var jobKey = _queueKeys.ToKey(_queueName, job.Id ?? string.Empty);
-        var metricsKey = _queueKeys.ToKey(_queueName, "metrics:completed");
-
-        var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
-        var serializedValue = JsonSerializer.Serialize(returnValue, jsonOptions);
-
-        var packedOpts = MessagePackSerializer.Serialize(new
+        var jsonData = JsonSerializer.Serialize(job.Data);
+        var packedOpts = MessagePackSerializer.Serialize(job.Options);
+        
+        var argsArray = new object?[]
         {
-            token,
-            keepJobs = GetKeepJobs(removeOnComplete),
-            attempts = job.Attempts,
-            attemptsMade = job.AttemptsMade
-        });
-
-        var parameters = new
-        {
-            waitKey = _keys["wait"],
-            activeKey = _keys["active"],
-            prioritizedKey = _keys["prioritized"],
-            eventStreamKey = _keys["events"],
-            stalledKey = _keys["stalled"],
-            rateLimiterKey = _keys["limiter"],
-            delayedKey = _keys["delayed"],
-            pausedKey = _keys["paused"],
-            metaKey = _keys["meta"],
-            pcKey = _keys["pc"],
-            finishedKey = _keys["completed"],
-            jobIdKey = jobKey,
-            metricsKey,
-            markerKey = _keys["marker"],
-            jobId = job.Id ?? string.Empty,
-            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            msgProperty = "returnvalue",
-            returnValue = serializedValue,
-            target = "completed",
-            fetchNext = fetchNext ? "1" : "",
-            keysPrefix = _keys[""],
-            opts = packedOpts,
-            jobFields = new byte[0] // Empty job fields for now
+            _keys[""],
+            job.Id ?? "",
+            job.Name,
+            job.Timestamp,
+            "",
+            ""
         };
-
-        var preparedScript = LuaScript.Prepare(LuaScript_moveToFinished.Content);
-        return await _database.ScriptEvaluateAsync(preparedScript, parameters);
+        
+        var packedArgs = MessagePackSerializer.Serialize(argsArray);
+        
+        return (packedArgs, jsonData, packedOpts);
     }
-
-    private object GetKeepJobs(object shouldRemove)
+    
+    private string[] FlattenDictionary(Dictionary<string, object> dict)
     {
-        return shouldRemove switch
+        var result = new List<string>();
+        
+        foreach (var kvp in dict)
         {
-            int count => new { count },
-            Dictionary<string, object> dict => dict,
-            bool remove when remove => new { count = 0 },
-            _ => new { count = -1 }
-        };
-    }
-
-    private Exception CreateFinishedError(int code, string jobId, string command, string state)
-    {
-        return code switch
-        {
-            -1 => new InvalidOperationException($"Missing key for job {jobId}. {command}"),
-            -2 => new InvalidOperationException($"Missing lock for job {jobId}. {command}"),
-            -3 => new InvalidOperationException($"Job {jobId} is not in the {state} state. {command}"),
-            _ => new InvalidOperationException($"Unknown error code {code} for job {jobId}. {command}")
-        };
-    }
-
-    private static object[] ObjectToFlatArray(object obj)
-    {
-        // Convert object properties to flat array [key1, value1, key2, value2, ...]
-        if (obj is Dictionary<string, object> dict)
-        {
-            return dict.SelectMany(kvp => new object[] { kvp.Key, kvp.Value }).ToArray();
+            result.Add(kvp.Key);
+            result.Add(kvp.Value?.ToString() ?? "");
         }
-
-        var properties = obj.GetType().GetProperties();
-        return properties.SelectMany(prop => new object[]
-        {
-            prop.Name,
-            prop.GetValue(obj)?.ToString() ?? ""
-        }).ToArray();
+        
+        return [.. result];
     }
 }

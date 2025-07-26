@@ -165,7 +165,7 @@ public class RedisScriptsTests : RedisTestBase
 
         // Assert
         result.Should().NotBeNull();
-        var counts = (RedisValue[])result!;
+        var counts = result!;
         counts.Should().HaveCount(3);
         ((int)counts[0]).Should().Be(2); // waiting jobs
         ((int)counts[1]).Should().Be(1); // delayed jobs
@@ -182,7 +182,7 @@ public class RedisScriptsTests : RedisTestBase
         var result = await redisScripts.GetCountsAsync("wait", "active", "completed");
 
         // Assert
-        var counts = (RedisValue[])result!;
+        var counts = result!;
         counts.Should().HaveCount(3);
         counts.Should().AllSatisfy(count => ((int)count).Should().Be(0));
     }
@@ -200,9 +200,13 @@ public class RedisScriptsTests : RedisTestBase
 
         // Act
         var result = await redisScripts.MoveToActiveAsync(
-            workerToken: "worker-123",
-            lockDuration: 30000,
-            workerName: "TestWorker"
+            token: "worker-123",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 3000 },
+                { "limiter", null },
+                { "workerName", "TestWorker" }
+            }
         );
 
         // Assert
@@ -229,14 +233,18 @@ public class RedisScriptsTests : RedisTestBase
 
         // Act
         var result = await redisScripts.MoveToActiveAsync(
-            workerToken: "worker-123",
-            lockDuration: 30000,
-            workerName: "TestWorker"
+            token: "worker-123",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 3000 },
+                { "limiter", null },
+                { "workerName", "TestWorker" }
+            }
         );
 
         // Assert
         result.Should().NotBeNull();
-        var resultArray = (RedisValue[])result!;
+        var resultArray = (RedisResult[])result!;
         resultArray.Should().HaveCount(4);
         resultArray.Should().AllSatisfy(value => ((int)value).Should().Be(0));
     }
@@ -251,7 +259,14 @@ public class RedisScriptsTests : RedisTestBase
         
         // Add job and move to active
         await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync("worker-123", 30000, "TestWorker");
+        await redisScripts.MoveToActiveAsync(
+            token: "worker-123",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 3000 },
+                { "limiter", null },
+                { "workerName", "TestWorker" }
+            });
 
         // Act
         var result = await redisScripts.RetryJobAsync(
@@ -299,7 +314,14 @@ public class RedisScriptsTests : RedisTestBase
         
         // Add job and move to active
         await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync("worker-123", 30000, "TestWorker");
+        await redisScripts.MoveToActiveAsync(
+            token: "worker-123",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 3000 },
+                { "limiter", null },
+                { "workerName", "TestWorker" }
+            });
 
         // Act
         var result = await redisScripts.MoveToCompletedAsync(
@@ -332,7 +354,14 @@ public class RedisScriptsTests : RedisTestBase
         
         // Add job and move to active
         await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync("worker-123", 30000, "TestWorker");
+        await redisScripts.MoveToActiveAsync(
+            token: "worker-123",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 3000 },
+                { "limiter", null },
+                { "workerName", "TestWorker" }
+            });
 
         // Act
         var result = await redisScripts.MoveToCompletedAsync(
@@ -367,7 +396,14 @@ public class RedisScriptsTests : RedisTestBase
         
         // Add job and move to active
         await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync("worker-123", 30000, "TestWorker");
+        await redisScripts.MoveToActiveAsync(
+            token: "worker-123",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 3000 },
+                { "limiter", null },
+                { "workerName", "TestWorker" }
+            });
 
         // Act
         var result = await redisScripts.RetryJobAsync(
@@ -395,10 +431,24 @@ public class RedisScriptsTests : RedisTestBase
         await redisScripts.AddStandardJobAsync(CreateTestJob(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
         // Act - Move first job
-        var result1 = await redisScripts.MoveToActiveAsync("worker-1", 30000, "Worker1");
-        
+        var result1 = await redisScripts.MoveToActiveAsync(
+            token: "worker-1",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 30000 },
+                { "limiter", null },
+                { "workerName", "Worker1" }
+            });
+
         // Act - Move second job
-        var result2 = await redisScripts.MoveToActiveAsync("worker-2", 30000, "Worker2");
+        var result2 = await redisScripts.MoveToActiveAsync(
+            token: "worker-2",
+            new Dictionary<string, object?>()
+            {
+                { "lockDuration", 30000 },
+                { "limiter", null },
+                { "workerName", "Worker2" }
+            });
 
         // Assert
         result1.Should().NotBeNull();
