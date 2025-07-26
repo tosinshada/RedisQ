@@ -5,29 +5,29 @@
   and the lock must be released in this script.
 
     Input Parameters:
-      @waitKey - wait key
-      @activeKey - active key
-      @prioritizedKey - prioritized key
-      @eventStreamKey - event stream key
-      @stalledKey - stalled key
-      @rateLimiterKey - rate limiter key
-      @delayedKey - delayed key
-      @pausedKey - paused key
-      @metaKey - meta key
-      @pcKey - pc priority counter
-      @finishedKey - completed/failed key
-      @jobIdKey - jobId key
-      @metricsKey - metrics key
-      @markerKey - marker key
-      @jobId - job ID
-      @timestamp - timestamp
-      @msgProperty - msg property returnvalue / failedReason
-      @returnValue - return value / failed reason
-      @target - target (completed/failed)
-      @fetchNext - fetch next?
-      @keysPrefix - keys prefix
-      @opts - msgpacked options
-      @jobFields - job fields to update
+      KEYS[1] - wait key
+      KEYS[2] - active key
+      KEYS[3] - prioritized key
+      KEYS[4] - event stream key
+      KEYS[5] - stalled key
+      KEYS[6] - rate limiter key
+      KEYS[7] - delayed key
+      KEYS[8] - paused key
+      KEYS[9] - meta key
+      KEYS[10] - pc priority counter
+      KEYS[11] - finished key
+      KEYS[12] - jobId key
+      KEYS[13] - metrics key
+      KEYS[14] - marker key
+      ARGV[1] - job ID
+      ARGV[2] - timestamp
+      ARGV[3] - msg property returnvalue / failedReason
+      ARGV[4] - return value / failed reason
+      ARGV[5] - target (completed/failed)
+      ARGV[6] - fetch next?
+      ARGV[7] - keys prefix
+      ARGV[8] - msgpacked options
+      ARGV[9] - job fields to update
 
       opts - token - lock token
       opts - keepJobs
@@ -64,17 +64,17 @@ local rcall = redis.call
 --- @include "includes/trimEvents"
 --- @include "includes/updateJobFields"
 
-if rcall("EXISTS", @jobIdKey) == 1 then -- Make sure job exists
-    local opts = cmsgpack.unpack(@opts)
+if rcall("EXISTS", KEYS[12]) == 1 then -- Make sure job exists
+    local opts = cmsgpack.unpack(ARGV[8])
 
     local token = opts['token']
 
-    local errorCode = removeLock(@jobIdKey, @stalledKey, token, @jobId)
+    local errorCode = removeLock(KEYS[12], KEYS[5], token, ARGV[1])
     if errorCode < 0 then
         return errorCode
     end
 
-    updateJobFields(@jobIdKey, @jobFields);
+    updateJobFields(KEYS[12], ARGV[9]);
 
     local attempts = opts['attempts']
     local maxMetricsSize = opts['maxMetricsSize']
@@ -82,71 +82,71 @@ if rcall("EXISTS", @jobIdKey) == 1 then -- Make sure job exists
     local maxAge = opts['keepJobs']['age']
 
     -- Remove from active list (if not active we shall return error)
-    local numRemovedElements = rcall("LREM", @activeKey, -1, @jobId)
+    local numRemovedElements = rcall("LREM", KEYS[2], -1, ARGV[1])
 
     if (numRemovedElements < 1) then
         return -3
     end
 
     -- Trim events before emiting them to avoid trimming events emitted in this script
-    trimEvents(@metaKey, @eventStreamKey)
+    trimEvents(KEYS[9], KEYS[4])
 
-    local jobAttributes = rcall("HMGET", @jobIdKey, "deid")
-    removeDeduplicationKeyIfNeededOnFinalization(@keysPrefix, jobAttributes[1], @jobId)
+    local jobAttributes = rcall("HMGET", KEYS[12], "deid")
+    removeDeduplicationKeyIfNeededOnFinalization(ARGV[7], jobAttributes[1], ARGV[1])
 
-    local attemptsMade = rcall("HINCRBY", @jobIdKey, "atm", 1)
+    local attemptsMade = rcall("HINCRBY", KEYS[12], "atm", 1)
 
     -- Remove job?
     if maxCount ~= 0 then
-        local targetSet = @finishedKey
+        local targetSet = KEYS[11]
         -- Add to complete/failed set
-        rcall("ZADD", targetSet, @timestamp, @jobId)
-        rcall("HSET", @jobIdKey, @msgProperty, @returnValue, "finishedOn", @timestamp)
+        rcall("ZADD", targetSet, ARGV[2], ARGV[1])
+        rcall("HSET", KEYS[12], ARGV[3], ARGV[4], "finishedOn", ARGV[2])
         -- "returnvalue" / "failedReason" and "finishedOn"
 
-        if @target == "failed" then
-            rcall("HDEL", @jobIdKey, "defa")
+        if ARGV[5] == "failed" then
+            rcall("HDEL", KEYS[12], "defa")
         end
 
         -- Remove old jobs?
         if maxAge ~= nil then
-            removeJobsByMaxAge(@timestamp, maxAge, targetSet, @keysPrefix)
+            removeJobsByMaxAge(ARGV[2], maxAge, targetSet, ARGV[7])
         end
 
         if maxCount ~= nil and maxCount > 0 then
-            removeJobsByMaxCount(maxCount, targetSet, @keysPrefix)
+            removeJobsByMaxCount(maxCount, targetSet, ARGV[7])
         end
     else
-        removeJobKeys(@jobIdKey)
+        removeJobKeys(KEYS[12])
     end
 
-    rcall("XADD", @eventStreamKey, "*", "event", @target, "jobId", @jobId, @msgProperty, @returnValue, "prev", "active")
+    rcall("XADD", KEYS[4], "*", "event", ARGV[5], "jobId", ARGV[1], ARGV[3], ARGV[4], "prev", "active")
 
-    if @target == "failed" then
+    if ARGV[5] == "failed" then
         if tonumber(attemptsMade) >= tonumber(attempts) then
-            rcall("XADD", @eventStreamKey, "*", "event", "retries-exhausted", "jobId", @jobId, "attemptsMade",
+            rcall("XADD", KEYS[4], "*", "event", "retries-exhausted", "jobId", ARGV[1], "attemptsMade",
                 attemptsMade)
         end
     end
 
     -- Collect metrics
     if maxMetricsSize ~= "" then
-        collectMetrics(@metricsKey, @metricsKey .. ':data', maxMetricsSize, @timestamp)
+        collectMetrics(KEYS[13], KEYS[13] .. ':data', maxMetricsSize, ARGV[2])
     end
 
     -- Try to get next job to avoid an extra roundtrip if the queue is not closing,
     -- and not rate limited.
-    if (@fetchNext == "1") then
+    if (ARGV[6] == "1") then
 
-        local target, isPausedOrMaxed = getTargetQueueList(@metaKey, @activeKey, @waitKey, @pausedKey)
+        local target, isPausedOrMaxed = getTargetQueueList(KEYS[9], KEYS[2], KEYS[1], KEYS[8])
 
         -- Check if there are delayed jobs that can be promoted
-        promoteDelayedJobs(@delayedKey, @markerKey, target, @prioritizedKey, @eventStreamKey, @keysPrefix, @timestamp, @pcKey,
+        promoteDelayedJobs(KEYS[7], KEYS[14], target, KEYS[3], KEYS[4], ARGV[7], ARGV[2], KEYS[10],
             isPausedOrMaxed)
 
         local maxJobs = tonumber(opts['limiter'] and opts['limiter']['max'])
         -- Check if we are rate limited first.
-        local expireTime = getRateLimitTTL(maxJobs, @rateLimiterKey)
+        local expireTime = getRateLimitTTL(maxJobs, KEYS[6])
 
         if expireTime > 0 then
             return {0, 0, expireTime, 0}
@@ -157,34 +157,34 @@ if rcall("EXISTS", @jobIdKey) == 1 then -- Make sure job exists
             return {0, 0, 0, 0}
         end
 
-        local jobId = rcall("RPOPLPUSH", @waitKey, @activeKey)
+        local jobId = rcall("RPOPLPUSH", KEYS[1], KEYS[2])
 
         if jobId then
             -- Markers in waitlist DEPRECATED in v5: Remove in v6.
             if string.sub(jobId, 1, 2) == "0:" then
-                rcall("LREM", @activeKey, 1, jobId)
+                rcall("LREM", KEYS[2], 1, jobId)
 
                 -- If jobId is special ID 0:delay (delay greater than 0), then there is no job to process
                 -- but if ID is 0:0, then there is at least 1 prioritized job to process
                 if jobId == "0:0" then
-                    jobId = moveJobFromPrioritizedToActive(@prioritizedKey, @activeKey, @pcKey)
-                    return prepareJobForProcessing(@keysPrefix, @rateLimiterKey, @eventStreamKey, jobId, @timestamp, maxJobs,
-                        @markerKey, opts)
+                    jobId = moveJobFromPrioritizedToActive(KEYS[3], KEYS[2], KEYS[10])
+                    return prepareJobForProcessing(ARGV[7], KEYS[6], KEYS[4], jobId, ARGV[2], maxJobs,
+                        KEYS[14], opts)
                 end
             else
-                return prepareJobForProcessing(@keysPrefix, @rateLimiterKey, @eventStreamKey, jobId, @timestamp, maxJobs, @markerKey,
+                return prepareJobForProcessing(ARGV[7], KEYS[6], KEYS[4], jobId, ARGV[2], maxJobs, KEYS[14],
                     opts)
             end
         else
-            jobId = moveJobFromPrioritizedToActive(@prioritizedKey, @activeKey, @pcKey)
+            jobId = moveJobFromPrioritizedToActive(KEYS[3], KEYS[2], KEYS[10])
             if jobId then
-                return prepareJobForProcessing(@keysPrefix, @rateLimiterKey, @eventStreamKey, jobId, @timestamp, maxJobs, @markerKey,
+                return prepareJobForProcessing(ARGV[7], KEYS[6], KEYS[4], jobId, ARGV[2], maxJobs, KEYS[14],
                     opts)
             end
         end
 
         -- Return the timestamp for the next delayed job if any.
-        local nextTimestamp = getNextDelayedTimestamp(@delayedKey)
+        local nextTimestamp = getNextDelayedTimestamp(KEYS[7])
         if nextTimestamp ~= nil then
             -- The result is guaranteed to be positive, since the
             -- ZRANGEBYSCORE command would have return a job otherwise.
@@ -192,15 +192,15 @@ if rcall("EXISTS", @jobIdKey) == 1 then -- Make sure job exists
         end
     end
 
-    local waitLen = rcall("LLEN", @waitKey)
+    local waitLen = rcall("LLEN", KEYS[1])
     if waitLen == 0 then
-        local activeLen = rcall("LLEN", @activeKey)
+        local activeLen = rcall("LLEN", KEYS[2])
 
         if activeLen == 0 then
-            local prioritizedLen = rcall("ZCARD", @prioritizedKey)
+            local prioritizedLen = rcall("ZCARD", KEYS[3])
 
             if prioritizedLen == 0 then
-                rcall("XADD", @eventStreamKey, "*", "event", "drained")
+                rcall("XADD", KEYS[4], "*", "event", "drained")
             end
         end
     end

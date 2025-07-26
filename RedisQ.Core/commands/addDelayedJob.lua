@@ -25,6 +25,8 @@
 
       Output:
         jobId  - OK
+        -1     - Job already exists
+        deduplicationJobId - if job was deduplicated
 ]]
 
 local jobId
