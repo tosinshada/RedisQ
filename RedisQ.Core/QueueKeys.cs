@@ -1,40 +1,31 @@
+using StackExchange.Redis;
+
 namespace RedisQ.Core;
 
-public class QueueKeys
+public class QueueKeys(string prefix)
 {
-    private readonly string _prefix;
-
-    public QueueKeys(string prefix)
+    public Dictionary<string, RedisKey> GetInitKeys(string queueName)
     {
-        _prefix = prefix;
+        List<string> initKeys = [
+            "", "wait", "active", "paused", "completed", "failed", "delayed",
+            "prioritized", "events", "stalled", "meta", "id", "marker", "pc",
+            "limiter", "repeat"
+        ];
+        
+        return initKeys.ToDictionary(
+            key => key,
+            key => ToKey(queueName, key)
+        );
+    }
+    
+    // use a list of suffixes to generate keys
+    public IEnumerable<RedisKey> GetKeys(string queueName, params string[] suffixes)
+    {
+        return suffixes.Select(suffix => ToKey(queueName, suffix));
     }
 
-    public Dictionary<string, string> GetKeys(string queueName)
+    public RedisKey ToKey(string queueName, string suffix)
     {
-        // [todo] - remove unnecessary keys if not used
-        return new Dictionary<string, string>
-        {
-            [""] = $"{_prefix}:{queueName}:",
-            ["wait"] = $"{_prefix}:{queueName}:wait",
-            ["active"] = $"{_prefix}:{queueName}:active",
-            ["paused"] = $"{_prefix}:{queueName}:paused",
-            ["completed"] = $"{_prefix}:{queueName}:completed",
-            ["failed"] = $"{_prefix}:{queueName}:failed",
-            ["delayed"] = $"{_prefix}:{queueName}:delayed",
-            ["prioritized"] = $"{_prefix}:{queueName}:prioritized",
-            ["events"] = $"{_prefix}:{queueName}:events",
-            ["stalled"] = $"{_prefix}:{queueName}:stalled",
-            ["meta"] = $"{_prefix}:{queueName}:meta",
-            ["id"] = $"{_prefix}:{queueName}:id",
-            ["marker"] = $"{_prefix}:{queueName}:marker",
-            ["pc"] = $"{_prefix}:{queueName}:pc",
-            ["limiter"] = $"{_prefix}:{queueName}:limiter",
-            ["repeat"] = $"{_prefix}:{queueName}:repeat"
-        };
-    }
-
-    public string ToKey(string queueName, string suffix)
-    {
-        return $"{_prefix}:{queueName}:{suffix}";
+        return $"{prefix}:{queueName}:{suffix}";
     }
 }

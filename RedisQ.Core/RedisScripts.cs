@@ -8,31 +8,28 @@ namespace RedisQ.Core;
 public class RedisScripts
 {
     private readonly QueueKeys _queueKeys;
-    private Dictionary<string, string> _keys;
+    private readonly Dictionary<string, RedisKey> _keys;
     private readonly string _queueName;
     private readonly IDatabase _database;
     
     public RedisScripts(string prefix, string queueName, IDatabase database)
     {
         _queueKeys = new QueueKeys(prefix);
-        _keys = _queueKeys.GetKeys(queueName);
+        _keys = _queueKeys.GetInitKeys(queueName);
         _queueName = queueName;
         _database = database;
     }
 
-    public RedisKey[] GetKeys(params string[] keyNames)
-    {
-        return [.. keyNames.Select(key => (RedisKey)_keys[key])];
-    }
-
-    public void ResetQueueKeys(string queueName)
-    {
-        _keys = _queueKeys.GetKeys(queueName);
-    }
-
     private RedisKey ToKey(string? suffix)
     {
-        return (RedisKey)_queueKeys.ToKey(_queueName, suffix ?? string.Empty);
+        return _queueKeys.ToKey(_queueName, suffix ?? string.Empty);
+    }
+    
+    public RedisKey[] GetKeys(params string[] suffixes)
+    {
+        return _queueKeys
+            .GetKeys(_queueName, suffixes)
+            .ToArray();
     }
     
     /// <summary>
@@ -56,7 +53,7 @@ public class RedisScripts
         
         var argArray = new RedisValue[]
         {
-            _keys[""],           // key prefix
+            _keys[""].ToString(),           // key prefix
             job.Id ?? "",        // custom id
             job.Name,            // name
             timestamp.ToString(), // timestamp
@@ -94,7 +91,7 @@ public class RedisScripts
         
         var argArray = new RedisValue[]
         {
-            _keys[""],           // keyPrefix
+            _keys[""].ToString(),           // keyPrefix
             job.Id ?? "",        // customId
             job.Name,            // jobName
             timestamp.ToString(), // timestamp
@@ -116,7 +113,7 @@ public class RedisScripts
     /// </summary>
     public async Task<RedisResult[]?> GetCountsAsync(params string[] types)
     {
-        var keyArray = new RedisKey[] { _keys[""] };
+        RedisKey[] keyArray = [ _keys[""] ];
         var argArray = types.Select(type => (RedisValue)(type == "waiting" ? "wait" : type)).ToArray();
 
         var result = await _database.ScriptEvaluateAsync(
@@ -133,8 +130,6 @@ public class RedisScripts
     /// </summary>
     public async Task<RedisResult> MoveToActiveAsync(string token, Dictionary<string, object?> options)
     {
-        var keys = GetKeys();
-
         var keyArray = GetKeys(
             "wait", 
             "active", 
@@ -160,7 +155,7 @@ public class RedisScripts
 
         var argArray = new RedisValue[]
         {
-            _keys[""],
+            _keys[""].ToString(),
             timestamp,
             packedOptions
         };
@@ -266,7 +261,7 @@ public class RedisScripts
             jsonValue,
             target,
             fetchNext ? "1" : "",
-            _keys[""],
+            _keys[""].ToString(),
             packedOptions
         };
 
@@ -294,13 +289,11 @@ public class RedisScripts
     public async Task<RedisResult> RetryJobAsync(string jobId, bool lifo, string token, 
         Dictionary<string, object>? fieldsToUpdate = null)
     {
-        var keys = GetKeys();
-
         var keyArray = GetKeys(
             "active", 
             "wait", 
             "paused", 
-            ToKey(jobId),
+            jobId,
             "meta", 
             "events", 
             "delayed", 
@@ -314,8 +307,8 @@ public class RedisScripts
         var pushCmd = lifo ? "RPUSH" : "LPUSH";
         
         var argArray = new List<RedisValue>
-        {
-            _keys[""],
+        { 
+            _keys[""].ToString(), 
             timestamp,
             pushCmd,
             jobId,
@@ -337,34 +330,35 @@ public class RedisScripts
         return result;
     }
     
-    private (byte[], string, byte[]) PrepareJobArgs(Job job)
-    {
-        var jsonData = JsonSerializer.Serialize(job.Data);
-        var packedOpts = MessagePackSerializer.Serialize(job.Options);
-        
-        var argsArray = new object?[]
-        {
-            _keys[""],
-            job.Id ?? "",
-            job.Name,
-            job.Timestamp,
-            "",
-            ""
-        };
-        
-        var packedArgs = MessagePackSerializer.Serialize(argsArray);
-        
-        return (packedArgs, jsonData, packedOpts);
-    }
+    // Bring it back when I figure out how to use msgpack for the job arguments
+    // private (byte[], string, byte[]) PrepareJobArgs(Job job)
+    // {
+    //     var jsonData = JsonSerializer.Serialize(job.Data);
+    //     var packedOpts = MessagePackSerializer.Serialize(job.Options);
+    //     
+    //     var argsArray = new object?[]
+    //     {
+    //         _keys[""],
+    //         job.Id ?? "",
+    //         job.Name,
+    //         job.Timestamp,
+    //         "",
+    //         ""
+    //     };
+    //     
+    //     var packedArgs = MessagePackSerializer.Serialize(argsArray);
+    //     
+    //     return (packedArgs, jsonData, packedOpts);
+    // }
     
-    private string[] FlattenDictionary(Dictionary<string, object> dict)
+    private static string[] FlattenDictionary(Dictionary<string, object> dict)
     {
         var result = new List<string>();
         
         foreach (var kvp in dict)
         {
             result.Add(kvp.Key);
-            result.Add(kvp.Value?.ToString() ?? "");
+            result.Add(kvp.Value.ToString() ?? "");
         }
         
         return [.. result];

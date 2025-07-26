@@ -55,21 +55,6 @@ public class RedisScriptsTests : RedisTestBase
     }
 
     [Fact]
-    public void ResetQueueKeys_ShouldUpdateKeysForNewQueue()
-    {
-        // Arrange
-        var redisScripts = CreateRedisScripts();
-        var newQueueName = "newqueue";
-
-        // Act
-        redisScripts.ResetQueueKeys(newQueueName);
-        var keys = redisScripts.GetKeys("wait");
-
-        // Assert
-        keys[0].ToString().Should().Be($"{TestPrefix}:{newQueueName}:wait");
-    }
-
-    [Fact]
     public async Task AddStandardJobAsync_WithoutCustomId_ShouldGenerateJobId()
     {
         // Arrange
@@ -292,15 +277,15 @@ public class RedisScriptsTests : RedisTestBase
         // Arrange
         var redisScripts = CreateRedisScripts();
 
-        // Act & Assert
-        var act = async () => await redisScripts.RetryJobAsync(
+        // Act
+        var result = await redisScripts.RetryJobAsync(
             jobId: "non-existent-job",
             lifo: false,
             token: "worker-123"
         );
-
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Missing key*");
+        
+        // Assert
+        ((int)result).Should().Be(-1); // Job not found
     }
 
     [Fact]
@@ -355,7 +340,7 @@ public class RedisScriptsTests : RedisTestBase
         // Add job and move to active
         await redisScripts.AddStandardJobAsync(job, timestamp);
         
-        var activeJobResult = await redisScripts.MoveToActiveAsync(
+        await redisScripts.MoveToActiveAsync(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
