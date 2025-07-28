@@ -1,4 +1,5 @@
 using FluentAssertions;
+using RedisQ.Core.Options;
 using StackExchange.Redis;
 using Xunit;
 
@@ -21,7 +22,7 @@ public class RedisScriptsTests : RedisTestBase
             Id = id,
             Name = name,
             Data = data ?? new { message = "test data" },
-            Options = new Dictionary<string, object>(),
+            Options = new JobOptions(),
             Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Attempts = 3,
             AttemptsMade = 0

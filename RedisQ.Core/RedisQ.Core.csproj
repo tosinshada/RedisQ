@@ -21,8 +21,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <AdditionalFiles Include="commands\includes\*.lua"/>
-        <AdditionalFiles Include="commands\*.lua"/>
+        <AdditionalFiles Include="Commands\includes\*.lua"/>
+        <AdditionalFiles Include="Commands\*.lua"/>
     </ItemGroup>
 
 </Project>
