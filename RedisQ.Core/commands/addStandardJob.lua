@@ -53,13 +53,11 @@ local customId = ARGV[2]
 local jobName = ARGV[3]
 local timestamp = ARGV[4]
 local repeatJobKey = ARGV[5]
-local deduplicationKey = ARGV[6]
-local data = ARGV[7]
-local opts = cmsgpack.unpack(ARGV[8])
+local data = ARGV[6]
+local opts = cmsgpack.unpack(ARGV[7])
 
 -- Includes
 --- @include "includes/addJobInTargetList"
---- @include "includes/deduplicateJob"
 --- @include "includes/getOrSetMaxEvents"
 --- @include "includes/getTargetQueueList"
 --- @include "includes/storeJob"
@@ -79,12 +77,6 @@ else
           "duplicated", "jobId", jobId)
         return -1 -- Job already exists
     end
-end
-
-local deduplicationJobId = deduplicateJob(opts['de'], jobId, KEYS[5],
-  deduplicationKey, eventsKey, maxEvents, keyPrefix)
-if deduplicationJobId then
-  return deduplicationJobId
 end
 
 -- Store the job.

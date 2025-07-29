@@ -3,13 +3,9 @@
 ]]
 
 -- Includes
---- @include "removeDeduplicationKeyIfNeededOnRemoval"
 --- @include "removeJobKeys"
 
-local function removeJob(jobId, baseKey, shouldRemoveDeduplicationKey)
+local function removeJob(jobId, baseKey)
   local jobKey = baseKey .. jobId
-  if shouldRemoveDeduplicationKey then
-    removeDeduplicationKeyIfNeededOnRemoval(baseKey, jobKey, jobId)
-  end
   removeJobKeys(jobKey)
 end

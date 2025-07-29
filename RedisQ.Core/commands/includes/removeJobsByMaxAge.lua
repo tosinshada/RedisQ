@@ -5,12 +5,11 @@
 -- Includes
 --- @include "removeJob"
 
-local function removeJobsByMaxAge(timestamp, maxAge, targetSet, prefix,
-  shouldRemoveDebounceKey)
+local function removeJobsByMaxAge(timestamp, maxAge, targetSet, prefix)
   local start = timestamp - maxAge * 1000
   local jobIds = rcall("ZREVRANGEBYSCORE", targetSet, start, "-inf")
   for i, jobId in ipairs(jobIds) do
-    removeJob(jobId, prefix, false --[[remove debounce key]])
+    removeJob(jobId, prefix)
   end
   rcall("ZREMRANGEBYSCORE", targetSet, "-inf", start)
 end

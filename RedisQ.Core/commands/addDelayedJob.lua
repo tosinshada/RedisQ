@@ -14,7 +14,6 @@
       KEYS[4] - delayedKey - delayed queue key
       KEYS[5] - completedKey - completed queue key
       KEYS[6] - eventsKey - events stream key
-      KEYS[7] - deduplicationKey - deduplication key (optional)
       
       ARGV[1] - keyPrefix - key prefix for job keys
       ARGV[2] - customId - custom job id (optional, will generate if empty)
@@ -26,7 +25,6 @@
       Output:
         jobId  - OK
         -1     - Job already exists
-        deduplicationJobId - if job was deduplicated
 ]]
 
 local jobId
@@ -36,7 +34,6 @@ local opts = cmsgpack.unpack(ARGV[6])
 
 -- Includes
 --- @include "includes/addDelayedJob"
---- @include "includes/deduplicateJob"
 --- @include "includes/getOrSetMaxEvents"
 --- @include "includes/storeJob"
 
@@ -53,12 +50,6 @@ else
     if rcall("EXISTS", jobIdKey) == 1 then
         return -1 -- Job already exists
     end
-end
-
-local deduplicationJobId = deduplicateJob(opts['de'], jobId, KEYS[4], KEYS[7],
-  KEYS[6], maxEvents, ARGV[1])
-if deduplicationJobId then
-  return deduplicationJobId
 end
 
 local delay, priority = storeJob(KEYS[6], jobIdKey, jobId, ARGV[3], ARGV[5],

@@ -56,7 +56,6 @@ local rcall = redis.call
 --- @include "includes/moveJobFromPrioritizedToActive"
 --- @include "includes/prepareJobForProcessing"
 --- @include "includes/promoteDelayedJobs"
---- @include "includes/removeDeduplicationKeyIfNeededOnFinalization"
 --- @include "includes/removeJobKeys"
 --- @include "includes/removeJobsByMaxAge"
 --- @include "includes/removeJobsByMaxCount"
@@ -90,9 +89,6 @@ if rcall("EXISTS", KEYS[12]) == 1 then -- Make sure job exists
 
     -- Trim events before emiting them to avoid trimming events emitted in this script
     trimEvents(KEYS[9], KEYS[4])
-
-    local jobAttributes = rcall("HMGET", KEYS[12], "deid")
-    removeDeduplicationKeyIfNeededOnFinalization(ARGV[7], jobAttributes[1], ARGV[1])
 
     local attemptsMade = rcall("HINCRBY", KEYS[12], "atm", 1)
 
