@@ -93,7 +93,15 @@ public class RedisScripts
         );
         
         var jsonData = JsonSerializer.Serialize(job.Data);
-        var packedOpts = MessagePackSerializer.Serialize(job.Options);
+        var packedOpts = MessagePackSerializer.Serialize(new
+        {
+            delay = job.Options.Delay,
+            priority = job.Options.Priority,
+            removeOnComplete = job.Options.RemoveOnComplete,
+            removeOnFail = job.Options.RemoveOnFail,
+            stackTraceLimit = job.Options.StackTraceLimit,
+            order = job.Options.Order
+        });
         
         var argArray = new RedisValue[]
         {
