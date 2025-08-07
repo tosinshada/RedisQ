@@ -10,13 +10,13 @@
     Input Parameters:
       KEYS[1] - markerKey - marker key
       KEYS[2] - metaKey - meta key
-      KEYS[3] - idKey - id counter key
+      KEYS[3] - idCounterKey - id counter key
       KEYS[4] - delayedKey - delayed queue key
       KEYS[5] - completedKey - completed queue key
       KEYS[6] - eventsKey - events stream key
       
-      ARGV[1] - keyPrefix - key prefix for job keys
-      ARGV[2] - customId - custom job id (optional, will generate if empty)
+      keyPrefix - keyPrefix - key prefix for job keys
+      customId - customId - custom job id (optional, will generate if empty)
       ARGV[3] - jobName - job name
       ARGV[4] - timestamp - job timestamp
       ARGV[5] - jobData - JSON stringified job data
@@ -27,9 +27,22 @@
         -1     - Job already exists
 ]]
 
+local markerKey = KEYS[1]
+local metaKey = KEYS[2]
+local idCounterKey = KEYS[3]
+local delayedKey = KEYS[4]
+local completedKey = KEYS[5]
+local eventsKey = KEYS[6]
+
 local jobId
 local jobIdKey
 local rcall = redis.call
+
+local keyPrefix = ARGV[1]
+local customId = ARGV[2]
+local jobName = ARGV[3]
+local timestamp = ARGV[4]
+local jobData = ARGV[5]
 local opts = cmsgpack.unpack(ARGV[6])
 
 -- Includes
@@ -37,24 +50,24 @@ local opts = cmsgpack.unpack(ARGV[6])
 --- @include "includes/getOrSetMaxEvents"
 --- @include "includes/storeJob"
 
-local jobCounter = rcall("INCR", KEYS[3])
+local jobCounter = rcall("INCR", idCounterKey)
 
-local maxEvents = getOrSetMaxEvents(KEYS[2])
+local maxEvents = getOrSetMaxEvents(metaKey)
 
-if ARGV[2] == "" then
+if customId == "" then
     jobId = jobCounter
-    jobIdKey = ARGV[1] .. jobId
+    jobIdKey = keyPrefix .. jobId
 else
-    jobId = ARGV[2]
-    jobIdKey = ARGV[1] .. jobId
+    jobId = customId
+    jobIdKey = keyPrefix .. jobId
     if rcall("EXISTS", jobIdKey) == 1 then
         return -1 -- Job already exists
     end
 end
 
-local delay, priority = storeJob(KEYS[6], jobIdKey, jobId, ARGV[3], ARGV[5],
-    opts, ARGV[4])
+local delay, priority = storeJob(eventsKey, jobIdKey, jobId, jobName, jobData,
+    opts, timestamp)
 
-addDelayedJob(jobId, KEYS[4], KEYS[6], ARGV[4], maxEvents, KEYS[1], delay)
+addDelayedJob(jobId, delayedKey, eventsKey, timestamp, maxEvents, markerKey, delay)
 
 return jobId .. "" -- convert to string
