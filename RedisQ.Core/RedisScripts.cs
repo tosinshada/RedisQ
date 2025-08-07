@@ -49,18 +49,24 @@ public class RedisScripts
         );
         
         var jsonData = JsonSerializer.Serialize(job.Data);
-        var packedOpts = MessagePackSerializer.Serialize(job.Options);
+        var packedOpts = MessagePackSerializer.Serialize(new
+        {
+            delay = job.Options.Delay,
+            priority = job.Options.Priority,
+            removeOnComplete = job.Options.RemoveOnComplete,
+            removeOnFail = job.Options.RemoveOnFail,
+            stackTraceLimit = job.Options.StackTraceLimit,
+            order = job.Options.Order
+        });
         
         var argArray = new RedisValue[]
         {
-            _keys[""].ToString(),           // key prefix
-            job.Id ?? "",        // custom id
-            job.Name,            // name
-            timestamp.ToString(), // timestamp
-            "",                  // repeat job key (optional)
-            "",                  // deduplication key (optional)
-            jsonData,            // JSON stringified job data
-            packedOpts           // msgpacked options
+            _keys[""].ToString(),   // key prefix
+            job.Id ?? "",           // custom id
+            job.Name,               // name
+            timestamp.ToString(),   // timestamp
+            jsonData,               // JSON stringified job data
+            packedOpts              // msgpacked options
         };
         
         var result = await _database.ScriptEvaluateAsync(

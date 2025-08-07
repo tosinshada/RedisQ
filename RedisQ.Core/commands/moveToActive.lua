@@ -17,6 +17,7 @@
     KEYS[8] - meta key
     KEYS[9] - pc priority counter key
     KEYS[10] - marker key
+    
     ARGV[1] - key prefix
     ARGV[2] - current timestamp
     ARGV[3] - msgpacked options (token, lockDuration, limiter, name)
@@ -32,12 +33,12 @@ local opts = cmsgpack.unpack(ARGV[3])
 -- Includes
 --- @include "includes/getNextDelayedTimestamp"
 --- @include "includes/getRateLimitTTL"
---- @include "includes/getTargetQueueList"
+--- @include "includes/getTargetQueue"
 --- @include "includes/moveJobFromPrioritizedToActive"
 --- @include "includes/prepareJobForProcessing"
 --- @include "includes/promoteDelayedJobs"
 
-local target, isPausedOrMaxed = getTargetQueueList(KEYS[8], KEYS[2], KEYS[1], KEYS[7])
+local target, isPausedOrMaxed = getTargetQueue(KEYS[8], KEYS[2], KEYS[1], KEYS[7])
 
 -- Check if there are delayed jobs that we can move to wait.
 promoteDelayedJobs(KEYS[6], KEYS[10], target, KEYS[3], KEYS[4], ARGV[1],

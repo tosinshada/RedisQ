@@ -5,7 +5,6 @@ namespace RedisQ.Core.Options;
 /// <summary>
 /// Options for configuring a job.
 /// </summary>
-[MessagePackObject]
 public class JobOptions
 {
     /// <summary>
@@ -15,15 +14,21 @@ public class JobOptions
     /// 
     /// Default: 0
     /// </summary>
-    [Key("delay")]
     public int Delay { get; set; }
+    
+    /// <summary>
+    /// This option allows you to determine if the job should be processed immediately
+    /// A higher value means that the job will be processed earlier.
+    /// 
+    /// Default: 0
+    /// </summary>
+    public int Priority { get; set; }
 
     /// <summary>
     /// If true, removes the job when it successfully completes.
     /// 
     /// Default behavior is to keep the job in the completed set.
     /// </summary>
-    [Key("removeOnComplete")]
     public bool RemoveOnComplete { get; set; }
 
     /// <summary>
@@ -31,7 +36,6 @@ public class JobOptions
     /// 
     /// Default behavior is to keep the job in the failed set.
     /// </summary>
-    [Key("removeOnFail")]
     public bool RemoveOnFail { get; set; }
 
     /// <summary>
@@ -39,6 +43,13 @@ public class JobOptions
     ///
     /// Default: 10
     /// </summary>
-    [Key("stackTraceLimit")]
     public int StackTraceLimit { get; set; } = 10;
+
+    /// <summary>
+    /// The order in which jobs are processed.
+    /// Possible values are "lifo" (last in, first out) or "fifo" (first in, first out).
+    ///
+    /// Default: "lifo"
+    /// </summary>
+    public string Order { get; set; } = "lifo";
 }

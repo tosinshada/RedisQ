@@ -31,18 +31,22 @@
       ARGV[2] custom id (optional, will generate if empty)
       ARGV[3] name
       ARGV[4] timestamp
-      ARGV[5] repeat job key (optional)
-      ARGV[6] deduplication key (optional)
-      ARGV[7] Json stringified job data
-      ARGV[8] msgpacked options
+      ARGV[5] Json stringified job data
+      ARGV[6] msgpacked options
 
       Output:
         jobId  - OK
         -1     - Job already exists
 ]]
 
+local waitKey = KEYS[1]
+local pausedKey = KEYS[2]
 local metaKey = KEYS[3]
+local jobIdCounterKey = KEYS[4]
+local delayedKey = KEYS[5]
+local activeKey = KEYS[6]
 local eventsKey = KEYS[7]
+local markerKey = KEYS[8]
 
 local jobId
 local jobIdKey
@@ -52,17 +56,16 @@ local keyPrefix = ARGV[1]
 local customId = ARGV[2]
 local jobName = ARGV[3]
 local timestamp = ARGV[4]
-local repeatJobKey = ARGV[5]
-local data = ARGV[6]
-local opts = cmsgpack.unpack(ARGV[7])
+local data = ARGV[5]
+local opts = cmsgpack.unpack(ARGV[6])
 
 -- Includes
---- @include "includes/addJobInTargetList"
+--- @include "includes/addJobInTargetQueue"
 --- @include "includes/getOrSetMaxEvents"
---- @include "includes/getTargetQueueList"
+--- @include "includes/getTargetQueue"
 --- @include "includes/storeJob"
 
-local jobCounter = rcall("INCR", KEYS[4])
+local jobCounter = rcall("INCR", jobIdCounterKey)
 
 local maxEvents = getOrSetMaxEvents(metaKey)
 
@@ -82,11 +85,11 @@ end
 -- Store the job.
 storeJob(eventsKey, jobIdKey, jobId, jobName, data, opts, timestamp)
 
-local target, isPausedOrMaxed = getTargetQueueList(metaKey, KEYS[6], KEYS[1], KEYS[2])
+local target, isPausedOrMaxed = getTargetQueue(metaKey, activeKey, waitKey, pausedKey)
 
 -- LIFO or FIFO
-local pushCmd = opts['lifo'] and 'RPUSH' or 'LPUSH'
-addJobInTargetList(target, KEYS[8], pushCmd, isPausedOrMaxed, jobId)
+local pushCmd = (opts['order'] == 'lifo') and 'RPUSH' or 'LPUSH'
+addJobInTargetQueue(target, markerKey, pushCmd, isPausedOrMaxed, jobId)
 
 -- Emit waiting event
 rcall("XADD", eventsKey, "MAXLEN", "~", maxEvents, "*", "event", "waiting",

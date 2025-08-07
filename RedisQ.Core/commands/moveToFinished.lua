@@ -52,7 +52,7 @@ local rcall = redis.call
 --- @include "includes/collectMetrics"
 --- @include "includes/getNextDelayedTimestamp"
 --- @include "includes/getRateLimitTTL"
---- @include "includes/getTargetQueueList"
+--- @include "includes/getTargetQueue"
 --- @include "includes/moveJobFromPrioritizedToActive"
 --- @include "includes/prepareJobForProcessing"
 --- @include "includes/promoteDelayedJobs"
@@ -134,7 +134,7 @@ if rcall("EXISTS", KEYS[12]) == 1 then -- Make sure job exists
     -- and not rate limited.
     if (ARGV[6] == "1") then
 
-        local target, isPausedOrMaxed = getTargetQueueList(KEYS[9], KEYS[2], KEYS[1], KEYS[8])
+        local target, isPausedOrMaxed = getTargetQueue(KEYS[9], KEYS[2], KEYS[1], KEYS[8])
 
         -- Check if there are delayed jobs that can be promoted
         promoteDelayedJobs(KEYS[7], KEYS[14], target, KEYS[3], KEYS[4], ARGV[7], ARGV[2], KEYS[10],
@@ -183,7 +183,7 @@ if rcall("EXISTS", KEYS[12]) == 1 then -- Make sure job exists
         local nextTimestamp = getNextDelayedTimestamp(KEYS[7])
         if nextTimestamp ~= nil then
             -- The result is guaranteed to be positive, since the
-            -- ZRANGEBYSCORE command would have return a job otherwise.
+            -- ZRANGEBYLEX command would have return a job otherwise.
             return {0, 0, 0, nextTimestamp}
         end
     end
