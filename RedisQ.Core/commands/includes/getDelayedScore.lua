@@ -20,7 +20,7 @@ local function getDelayedScore(delayedKey, timestamp, delay)
   local result = rcall("ZREVRANGEBYLEX", delayedKey, 
     "(" .. baseScore .. ":\xff", "(" .. baseScore .. ":", "LIMIT", 0, 1)
     
-  if #result then
+  if #result > 0 then
     local lastJobId = string.match(result[1], baseScore .. ":(%d+)")
     local nextJobId = (tonumber(lastJobId) or 0) + 1
     return baseScore .. ":" .. string.format("%012d", nextJobId), delayedTimestamp
