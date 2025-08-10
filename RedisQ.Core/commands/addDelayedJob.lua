@@ -46,7 +46,8 @@ local jobData = ARGV[5]
 local opts = cmsgpack.unpack(ARGV[6])
 
 -- Includes
---- @include "includes/addDelayedJob"
+--- @include "addDelayMarkerIfNeeded"
+--- @include "getDelayedScore"
 --- @include "includes/getOrSetMaxEvents"
 --- @include "includes/storeJob"
 
@@ -65,9 +66,18 @@ else
     end
 end
 
-local delay, priority = storeJob(eventsKey, jobIdKey, jobId, jobName, jobData,
-    opts, timestamp)
+local delay = opts['delay'] or 0
+local priority = opts['priority'] or 0
 
-addDelayedJob(jobId, delayedKey, eventsKey, timestamp, maxEvents, markerKey, delay)
+storeJob(eventsKey, jobIdKey, jobId, jobName, jobData, delay, priority, timestamp)
+
+local score, delayedTimestamp = getDelayedScore(delayedKey, timestamp, tonumber(delay))
+
+rcall("ZADD", delayedKey, score, jobId)
+rcall("XADD", eventsKey, "MAXLEN", "~", maxEvents, "*", "event", "delayed",
+   "jobId", jobId, "delay", delay, "timestamp", delayedTimestamp)
+   
+-- mark that a delayed job is available
+addDelayMarkerIfNeeded(markerKey, delayedKey)
 
 return jobId .. "" -- convert to string

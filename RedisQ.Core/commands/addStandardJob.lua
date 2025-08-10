@@ -82,8 +82,11 @@ else
     end
 end
 
+local delay = opts['delay'] or 0
+local priority = opts['priority'] or 0
+
 -- Store the job.
-storeJob(eventsKey, jobIdKey, jobId, jobName, data, opts, timestamp)
+storeJob(eventsKey, jobIdKey, jobId, jobName, data, delay, priority, timestamp)
 
 local target, isPausedOrMaxed = getTargetQueue(metaKey, activeKey, waitKey, pausedKey)
 

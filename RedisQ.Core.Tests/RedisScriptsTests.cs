@@ -64,7 +64,7 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Act
-        var result = await redisScripts.AddStandardJobAsync(job, timestamp);
+        var result = await redisScripts.AddStandardJob(job);
 
         // Assert
         result.Should().NotBeNull();
@@ -83,7 +83,7 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Act
-        var result = await redisScripts.AddStandardJobAsync(job, timestamp);
+        var result = await redisScripts.AddStandardJob(job);
 
         // Assert
         result.ToString().Should().Be(customId);
@@ -100,8 +100,8 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Act
-        await redisScripts.AddStandardJobAsync(job1, timestamp);
-        var result = await redisScripts.AddStandardJobAsync(job2, timestamp);
+        await redisScripts.AddStandardJob(job1);
+        var result = await redisScripts.AddStandardJob(job2);
 
         // Assert
         ((int)result).Should().Be(-1); // Job already exists
@@ -116,7 +116,7 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds();
 
         // Act
-        var result = await redisScripts.AddDelayedJobAsync(job, timestamp);
+        var result = await redisScripts.AddDelayedJob(job);
 
         // Assert
         result.Should().NotBeNull();
@@ -139,15 +139,14 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Add jobs to different queues
-        await redisScripts.AddStandardJobAsync(job1, timestamp);
-        await redisScripts.AddStandardJobAsync(job2, timestamp);
+        await redisScripts.AddStandardJob(job1);
+        await redisScripts.AddStandardJob(job2);
         
         // Add a delayed job
-        var delayedTimestamp = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeMilliseconds();
-        await redisScripts.AddDelayedJobAsync(CreateTestJob(), delayedTimestamp);
+        await redisScripts.AddDelayedJob(CreateTestJob());
 
         // Act
-        var result = await redisScripts.GetCountsAsync("wait", "delayed", "completed");
+        var result = await redisScripts.GetCounts("wait", "delayed", "completed");
 
         // Assert
         result.Should().NotBeNull();
@@ -165,7 +164,7 @@ public class RedisScriptsTests : RedisTestBase
         var redisScripts = CreateRedisScripts();
 
         // Act
-        var result = await redisScripts.GetCountsAsync("wait", "active", "completed");
+        var result = await redisScripts.GetCounts("wait", "active", "completed");
 
         // Assert
         var counts = result!;
@@ -182,10 +181,10 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         
         // Add a job to wait queue
-        await redisScripts.AddStandardJobAsync(job, timestamp);
+        await redisScripts.AddStandardJob(job);
 
         // Act
-        var result = await redisScripts.MoveToActiveAsync(
+        var result = await redisScripts.MoveToActive(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
@@ -218,7 +217,7 @@ public class RedisScriptsTests : RedisTestBase
         var redisScripts = CreateRedisScripts();
 
         // Act
-        var result = await redisScripts.MoveToActiveAsync(
+        var result = await redisScripts.MoveToActive(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
@@ -244,8 +243,8 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         
         // Add job and move to active
-        await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync(
+        await redisScripts.AddStandardJob(job);
+        await redisScripts.MoveToActive(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
@@ -299,8 +298,8 @@ public class RedisScriptsTests : RedisTestBase
         var returnValue = new { status = "success", result = "completed" };
         
         // Add job and move to active
-        await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync(
+        await redisScripts.AddStandardJob(job);
+        await redisScripts.MoveToActive(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
@@ -339,9 +338,9 @@ public class RedisScriptsTests : RedisTestBase
         var returnValue = new { status = "success" };
         
         // Add job and move to active
-        await redisScripts.AddStandardJobAsync(job, timestamp);
+        await redisScripts.AddStandardJob(job);
         
-        await redisScripts.MoveToActiveAsync(
+        await redisScripts.MoveToActive(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
@@ -382,8 +381,8 @@ public class RedisScriptsTests : RedisTestBase
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         
         // Add job and move to active
-        await redisScripts.AddStandardJobAsync(job, timestamp);
-        await redisScripts.MoveToActiveAsync(
+        await redisScripts.AddStandardJob(job);
+        await redisScripts.MoveToActive(
             token: "worker-123",
             new Dictionary<string, object?>()
             {
@@ -414,11 +413,11 @@ public class RedisScriptsTests : RedisTestBase
         var redisScripts = CreateRedisScripts();
 
         // Add multiple jobs
-        await redisScripts.AddStandardJobAsync(CreateTestJob(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        await redisScripts.AddStandardJobAsync(CreateTestJob(), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        await redisScripts.AddStandardJob(CreateTestJob());
+        await redisScripts.AddStandardJob(CreateTestJob());
 
         // Act - Move first job
-        var result1 = await redisScripts.MoveToActiveAsync(
+        var result1 = await redisScripts.MoveToActive(
             token: "worker-1",
             new Dictionary<string, object?>()
             {
@@ -428,7 +427,7 @@ public class RedisScriptsTests : RedisTestBase
             });
 
         // Act - Move second job
-        var result2 = await redisScripts.MoveToActiveAsync(
+        var result2 = await redisScripts.MoveToActive(
             token: "worker-2",
             new Dictionary<string, object?>()
             {

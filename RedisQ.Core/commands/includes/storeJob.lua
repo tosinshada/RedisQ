@@ -5,15 +5,11 @@
   Function to store a job
 ]]
 local function storeJob(eventsKey, jobIdKey, jobId, name, data, 
-                        opts, timestamp)
+                        delay, priority, timestamp)
     local jsonOpts = cjson.encode(opts)
-    local delay = opts['delay'] or 0
-    local priority = opts['priority'] or 0
 
     rcall("HMSET", jobIdKey, "name", name, "data", data, "opts", jsonOpts,
           "timestamp", timestamp, "delay", delay, "priority", priority)
 
     rcall("XADD", eventsKey, "*", "event", "added", "jobId", jobId, "name", name)
-
-    return delay, priority
 end

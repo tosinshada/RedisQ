@@ -5,37 +5,21 @@ using RedisQ.Core.Generated;
 
 namespace RedisQ.Core;
 
-public class RedisScripts
+public class RedisScripts(string prefix, string queueName, IDatabase database)
 {
-    private readonly QueueKeys _queueKeys;
-    private readonly Dictionary<string, RedisKey> _keys;
-    private readonly string _queueName;
-    private readonly IDatabase _database;
-    
-    public RedisScripts(string prefix, string queueName, IDatabase database)
-    {
-        _queueKeys = new QueueKeys(prefix);
-        _keys = _queueKeys.GetInitKeys(queueName);
-        _queueName = queueName;
-        _database = database;
-    }
-
-    private RedisKey ToKey(string? suffix)
-    {
-        return _queueKeys.ToKey(_queueName, suffix ?? string.Empty);
-    }
+    private readonly QueueKeys _queueKeys = new(prefix, queueName);
     
     public RedisKey[] GetKeys(params string[] suffixes)
     {
         return _queueKeys
-            .GetKeys(_queueName, suffixes)
+            .GetKeys(suffixes)
             .ToArray();
     }
     
     /// <summary>
     /// Add a standard job to the queue
     /// </summary>
-    public async Task<RedisResult> AddStandardJobAsync(Job job, long timestamp)
+    public async Task<RedisResult> AddStandardJob(Job job)
     {
         var keyArray = GetKeys(
             "wait", 
@@ -61,15 +45,15 @@ public class RedisScripts
         
         var argArray = new RedisValue[]
         {
-            _keys[""].ToString(),   // key prefix
+            _queueKeys.KeyPrefix,   // key prefix
             job.Id ?? "",           // custom id
             job.Name,               // name
-            timestamp.ToString(),   // timestamp
-            jsonData,               // JSON stringified job data
-            packedOpts              // msgpacked options
+            job.Timestamp.ToString(),   // timestamp
+            jsonData,               // JSON serialized job data
+            packedOpts              // msg packed options
         };
         
-        var result = await _database.ScriptEvaluateAsync(
+        var result = await database.ScriptEvaluateAsync(
             LuaScript_addStandardJob.Content,
             keyArray,
             argArray
@@ -81,7 +65,7 @@ public class RedisScripts
     /// <summary>
     /// Add a delayed job to the queue
     /// </summary>
-    public async Task<RedisResult> AddDelayedJobAsync(Job job, long timestamp)
+    public async Task<RedisResult> AddDelayedJob(Job job)
     {
         var keyArray = GetKeys(
             "marker", 
@@ -105,15 +89,15 @@ public class RedisScripts
         
         var argArray = new RedisValue[]
         {
-            _keys[""].ToString(),           // keyPrefix
-            job.Id ?? "",        // customId
-            job.Name,            // jobName
-            timestamp.ToString(), // timestamp
-            jsonData,            // JSON stringified job data
-            packedOpts           // msgpacked job options
+            _queueKeys.KeyPrefix,       // keyPrefix
+            job.Id ?? "",               // customId
+            job.Name,                   // jobName
+            job.Timestamp.ToString(),   // timestamp
+            jsonData,                   // JSON serialized job data
+            packedOpts                  // msg packed job options
         };
         
-        var result = await _database.ScriptEvaluateAsync(
+        var result = await database.ScriptEvaluateAsync(
             LuaScript_addDelayedJob.Content,
             keyArray,
             argArray
@@ -125,12 +109,12 @@ public class RedisScripts
     /// <summary>
     /// Get counts of jobs in different states
     /// </summary>
-    public async Task<RedisResult[]?> GetCountsAsync(params string[] types)
+    public async Task<RedisResult[]?> GetCounts(params string[] jobStates)
     {
-        RedisKey[] keyArray = [ _keys[""] ];
-        var argArray = types.Select(type => (RedisValue)(type == "waiting" ? "wait" : type)).ToArray();
+        RedisKey[] keyArray = [ _queueKeys.KeyPrefix ];
+        var argArray = jobStates.Select(type => (RedisValue)type).ToArray();
 
-        var result = await _database.ScriptEvaluateAsync(
+        var result = await database.ScriptEvaluateAsync(
             LuaScript_getCounts.Content,
             keyArray,
             argArray
@@ -142,7 +126,7 @@ public class RedisScripts
     /// <summary>
     /// Move a job from wait to active state
     /// </summary>
-    public async Task<RedisResult> MoveToActiveAsync(string token, Dictionary<string, object?> options)
+    public async Task<RedisResult> MoveToActive(string token, Dictionary<string, object?> options)
     {
         var keyArray = GetKeys(
             "wait", 
@@ -159,22 +143,22 @@ public class RedisScripts
         );
         
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var packedOptions = MessagePackSerializer.Serialize(new Dictionary<string, object?>
+        var packedOptions = MessagePackSerializer.Serialize(new
         {
-            { "token", token },
-            { "lockDuration", options["lockDuration"] },
-            { "limiter", options["limiter"] },
-            { "workerName", options["workerName"] }
+            token,
+            lockDuration = options["lockDuration"],
+            limiter = options["limiter"],
+            workerName = options["workerName"]
         });
 
         var argArray = new RedisValue[]
         {
-            _keys[""].ToString(),
+            _queueKeys.KeyPrefix,
             timestamp,
             packedOptions
         };
         
-        var result = await _database.ScriptEvaluateAsync(
+        var result = await database.ScriptEvaluateAsync(
             LuaScript_moveToActive.Content,
             keyArray,
             argArray
@@ -233,7 +217,7 @@ public class RedisScripts
             throw new ArgumentException("Job ID cannot be null", nameof(job));
         }
         
-        var metricsKey = ToKey($"metrics:{target}");
+        var metricsKey = _queueKeys.ToKey($"metrics:{target}");
 
         var keyArray = GetKeys(
                 "wait",
@@ -247,9 +231,9 @@ public class RedisScripts
                 "meta",
                 "pc",
                 target
-            ).Append(ToKey(job.Id))
+            ).Append(_queueKeys.ToKey(job.Id))
             .Append(metricsKey)
-            .Append(_keys["marker"])
+            .Append(_queueKeys.ToKey("marker"))
             .ToArray();
         
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -275,7 +259,7 @@ public class RedisScripts
             jsonValue,
             target,
             fetchNext ? "1" : "",
-            _keys[""].ToString(),
+            _queueKeys.KeyPrefix,
             packedOptions
         };
 
@@ -288,7 +272,7 @@ public class RedisScripts
             argArray = newArgArray.ToArray();
         }
 
-        var result = await _database.ScriptEvaluateAsync(
+        var result = await database.ScriptEvaluateAsync(
             LuaScript_moveToFinished.Content,
             keyArray,
             argArray
@@ -322,7 +306,7 @@ public class RedisScripts
         
         var argArray = new List<RedisValue>
         { 
-            _keys[""].ToString(), 
+            _queueKeys.KeyPrefix, 
             timestamp,
             pushCmd,
             jobId,
@@ -335,7 +319,7 @@ public class RedisScripts
             argArray.Add(MessagePackSerializer.Serialize(flatFields));
         }
         
-        var result = await _database.ScriptEvaluateAsync(
+        var result = await database.ScriptEvaluateAsync(
             LuaScript_retryJob.Content,
             keyArray,
             argArray.ToArray()
